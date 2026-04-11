@@ -1,6 +1,5 @@
 # build output
 burrow
-burrow.toml
 dist/
 
 # test artifacts
@@ -13,3 +12,7 @@ dist/
 *.swo
 .idea/
 .vscode/
+
+# personal config
+burrow.toml
+burrow.toml.pers
