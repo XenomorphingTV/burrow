@@ -28,7 +28,7 @@ without touching a crontab or writing a service file.
 
 <img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/38cc743b-4e8d-4450-a0c3-7ecfc2e7fd57" />
 
-<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/b5051572-6918-473d-921e-4c157b6b915f" />
+<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/68e80d53-af4b-4063-ac04-f28b3163d592" />
 
 <img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/7b443896-2e84-418c-92cb-b90adc63aed0" />
 
