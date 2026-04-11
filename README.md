@@ -6,17 +6,7 @@ Define named scripts in a TOML file, run them with a keystroke, stream their
 output live, chain them into pipelines, schedule them with cron, and browse
 the full run history, all without leaving the terminal.
 
-```
-  burrow
-
-  tasks   schedule   history   stats
- ──────────────────────────────────────────────────────────────────
-  ● db.migrate    │  $ node scripts/migrate.js
-  ● db.seed       │  [ok]  connected to postgres
-  ○ lint          │  [ok]  seeded 120 rows
-  ○ deploy        │  done in 1.8s
-```
-
+<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/c740085d-62fd-48e6-a9dc-c7a147e74f34" />
 
 ## Install
 
