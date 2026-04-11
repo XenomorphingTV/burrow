@@ -1,0 +1,15 @@
+# build output
+burrow
+burrow.toml
+dist/
+
+# test artifacts
+*.test
+*.out
+
+# editor and OS noise
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/

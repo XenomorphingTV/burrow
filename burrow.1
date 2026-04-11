@@ -1,0 +1,184 @@
+.TH BURROW 1 "2026-04-11" "burrow" "User Commands"
+.SH NAME
+burrow \- personal task catalogue, runner, and scheduler
+.SH SYNOPSIS
+.B burrow
+.RI [ subcommand ]
+.RI [ arguments ]
+.SH DESCRIPTION
+.B burrow
+is a personal task OS: a single place to catalogue, run, log, and schedule
+your scripts.
+It is global-first (lives in
+.IR ~/.config/burrow/ ),
+catalogue-first (tasks have names and descriptions, not just commands), and
+log-first (every run is recorded with full stdout/stderr).
+.PP
+Running
+.B burrow
+with no arguments launches the interactive TUI.
+.SH SUBCOMMANDS
+.TP
+.B burrow
+Launch the TUI (default when no subcommand is given).
+.TP
+.BI "burrow run " task
+Run
+.I task
+headlessly.
+Output is streamed to stdout/stderr and the run is recorded in history.
+If the task has
+.B depends_on
+entries the full pipeline is resolved and executed in order before the
+requested task.
+.TP
+.B burrow list
+Print all configured tasks as plain text, suitable for scripting.
+.TP
+.B burrow init
+Scaffold
+.I ~/.config/burrow/tasks.toml
+with a starter template and open it in
+.BR $EDITOR .
+Does nothing if the file already exists.
+.TP
+.B burrow daemon <subcommand>
+Manage the background daemon.
+See
+.B DAEMON SUBCOMMANDS
+below.
+.TP
+.B burrow help
+Print a summary of usage and keybindings.
+.SH DAEMON SUBCOMMANDS
+.TP
+.B start
+Enable and start the burrow daemon service.
+.TP
+.B stop
+Stop the running daemon.
+.TP
+.B status
+Show daemon status, uptime, heartbeat, and next scheduled run times.
+.TP
+.B install
+Write the platform service file (systemd unit on Linux, launchd plist on macOS).
+.TP
+.B uninstall
+Remove the service file.
+.SH CONFIGURATION
+Burrow merges two config files:
+.TP
+.I ~/.config/burrow/tasks.toml
+Global catalogue.
+Always loaded.
+.TP
+.I ./burrow.toml
+Local, repo-scoped catalogue.
+Loaded when present in the working directory.
+Local keys override global keys of the same name; tags and env vars are merged.
+.SS Settings
+.nf
+[settings]
+max_parallel = 4              # max concurrent tasks
+log_dir      = "~/.config/burrow/logs"
+max_log_run  = 500            # prune history after N runs per task
+max_log_age  = 90             # prune history older than N days
+.fi
+.SS Tasks
+.nf
+[tasks.db-seed]
+cmd         = "node scripts/seed.js"
+description = "Seed the development database"
+cwd         = "./backend"
+env         = { NODE_ENV = "development" }
+tags        = ["db", "setup"]
+depends_on  = ["other-task"]   # run other-task first (pipeline)
+on_failure  = "notify-slack"   # task name or shell command on failure
+.fi
+.SS Schedules
+.nf
+[schedules.nightly-seed]
+task = "db-seed"
+cron = "0 2 * * *"            # standard 5-field cron expression
+.fi
+.SH TUI KEYBINDINGS
+.TS
+l l.
+\fBKey\fR	\fBAction\fR
+\(ua/k	Navigate up
+\(da/j	Navigate down
+r	Run selected task
+x	Kill running task
+l	Clear log view
+Tab	Switch pane tab (tasks / schedule / history)
+/	Fuzzy filter by name or tag
+a	Add task
+e	Edit schedule cron expression
+Enter/Space	Toggle schedule enabled/disabled
+D	Clear task history
+?	Toggle help overlay
+pgup/ctrl+u	Scroll log up
+pgdn/ctrl+d	Scroll log down
+q/ctrl+c	Quit
+.TE
+.SH FILES
+.TP
+.I ~/.config/burrow/tasks.toml
+Global task catalogue.
+.TP
+.I ./burrow.toml
+Local repo-scoped task catalogue.
+.TP
+.I ~/.config/burrow/history.db
+Run history stored as a bbolt embedded database.
+Do not edit directly.
+.TP
+.I ~/.config/burrow/logs/
+Per-run log files, named by task and timestamp.
+.SH ENVIRONMENT
+.TP
+.B EDITOR
+Used by
+.B burrow init
+to open the config file after scaffolding.
+.SH EXAMPLES
+Launch the TUI:
+.PP
+.RS 4
+.EX
+burrow
+.EE
+.RE
+.PP
+Run a task headlessly and pipe its output:
+.PP
+.RS 4
+.EX
+burrow run db-seed | tee /tmp/seed.log
+.EE
+.RE
+.PP
+List tasks, then filter with grep:
+.PP
+.RS 4
+.EX
+burrow list | grep db
+.EE
+.RE
+.PP
+Check daemon status:
+.PP
+.RS 4
+.EX
+burrow daemon status
+.EE
+.RE
+.SH SEE ALSO
+.BR cron (8),
+.BR systemctl (1),
+.BR make (1)
+.SH BUGS
+Report issues at https://github.com/xenomorphingtv/burrow/issues
+.SH AUTHOR
+Written by the Xenomorphing

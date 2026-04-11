@@ -1,0 +1,163 @@
+# burrow.example.toml
+#
+# Copy this to burrow.toml in any project directory, or to
+# ~/.config/burrow/tasks.toml as your global catalogue.
+# Local and global configs are merged — local keys win.
+
+[settings]
+max_parallel = 4                       # how many tasks can run at the same time
+log_dir      = "~/.config/burrow/logs" # where per-run logs are written
+max_log_run  = 200                     # keep only the last 200 runs per task
+max_log_age  = 90                      # drop runs older than 90 days
+
+# Notify on task events. Per-task notify fields override this.
+# Accepted values: "success", "failure", "always"
+notify = ["failure"]
+
+
+# ── Simple tasks ────────────────────────────────────────────────────────────
+
+[tasks.hello]
+cmd         = "echo 'Hello from burrow!'"
+description = "Smoke-test that burrow is working"
+tags        = ["example"]
+
+[tasks.weather]
+cmd         = "curl -s 'wttr.in/?format=3'"
+description = "Current weather in one line"
+tags        = ["info"]
+
+[tasks.disk-usage]
+cmd         = "df -h /"
+description = "Root filesystem usage"
+tags        = ["util"]
+
+
+# ── Environment variables ────────────────────────────────────────────────────
+
+[tasks.env-demo]
+cmd         = "env | grep APP_"
+description = "Print all APP_ environment variables"
+tags        = ["example"]
+
+[tasks.env-demo.env]
+APP_ENV  = "development"
+APP_PORT = "8080"
+
+
+# ── Working directory ────────────────────────────────────────────────────────
+
+[tasks.list-home]
+cmd         = "ls -lh"
+description = "List files in home directory"
+cwd         = "~"
+tags        = ["util"]
+
+
+# ── Pipelines (depends_on) ───────────────────────────────────────────────────
+#
+# burrow resolves the full dependency graph before running anything.
+# If any step fails the pipeline stops and on_failure fires (if set).
+
+[tasks.lint]
+cmd         = "echo 'Linting...'"
+description = "Run the linter"
+tags        = ["ci"]
+
+[tasks.test]
+cmd         = "echo 'Testing...'"
+description = "Run the test suite"
+tags        = ["ci"]
+
+[tasks.build]
+cmd         = "echo 'Building...'"
+description = "Compile the project"
+depends_on  = ["lint", "test"]
+tags        = ["ci"]
+
+[tasks.deploy]
+cmd         = "echo 'Deploying...'"
+description = "Deploy to staging — runs lint, test, and build first"
+depends_on  = ["build"]
+tags        = ["ci"]
+on_failure  = "notify-failure"
+
+[tasks.notify-failure]
+cmd         = "echo 'Deploy failed! Notify the team.'"
+description = "Failure hook — called automatically when deploy fails"
+tags        = ["ci"]
+
+
+# ── Namespaced tasks (db.*) ──────────────────────────────────────────────────
+#
+# Tasks with a dot in their name are grouped in the sidebar.
+
+[tasks.db.migrate]
+cmd         = "echo 'Running migrations...'"
+description = "Apply pending database migrations"
+tags        = ["db"]
+
+[tasks.db.seed]
+cmd         = "echo 'Seeding database...'"
+description = "Seed the database with development fixtures"
+depends_on  = ["db.migrate"]
+tags        = ["db"]
+
+[tasks.db.reset]
+cmd         = "echo 'Resetting database...'"
+description = "Drop, recreate, migrate, and seed in one step"
+depends_on  = ["db.seed"]
+tags        = ["db"]
+
+[tasks.db.reset.env]
+DB_NAME = "app_development"
+
+
+# ── Notifications ────────────────────────────────────────────────────────────
+#
+# Override the global notify setting per task.
+# Requires notify-send (Linux) or osascript (macOS).
+
+[tasks.slow-job]
+cmd         = "sleep 5 && echo 'Done'"
+description = "A slow task — notifies on both success and failure"
+notify      = ["always"]
+tags        = ["example"]
+
+[tasks.silent-job]
+cmd         = "echo 'No notification for this one'"
+description = "Never sends a desktop notification, regardless of global setting"
+notify      = []
+tags        = ["example"]
+
+
+# ── External tasks ───────────────────────────────────────────────────────────
+#
+# external = true launches the command in a separate terminal window
+# instead of capturing its output in the burrow log pane.
+# Useful for interactive programs (TUIs, REPLs, etc.)
+# The terminal is auto-detected, or set settings.terminal to override.
+
+[tasks.htop]
+cmd         = "htop"
+description = "System monitor — opens in its own terminal window"
+external    = true
+tags        = ["util"]
+
+
+# ── Schedules ────────────────────────────────────────────────────────────────
+#
+# Standard 5-field cron expressions.
+# Toggle schedules on/off at runtime with enter/space in the schedule tab.
+
+[schedules.hourly-health]
+task = "disk-usage"
+cron = "0 * * * *"      # every hour
+
+[schedules.daily-weather]
+task = "weather"
+cron = "0 8 * * *"      # daily at 08:00
+
+[schedules.nightly-build]
+task = "build"
+cron = "0 2 * * 1-5"    # weeknights at 02:00

@@ -1,0 +1,36 @@
+version: 2
+
+project_name: burrow
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - main: ./cmd/burrow
+    binary: burrow
+    env:
+      - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/xenomorphingtv/burrow/internal/version.Version={{.Version}}
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - burrow.1
+      - README.md
+
+checksum:
+  name_template: checksums.txt
+
+release:
+  github:
+    owner: xenomorphingtv
+    name: burrow
+  footer: |
+    **Full changelog**: https://github.com/xenomorphingtv/burrow/compare/{{ .PreviousTag }}...{{ .Tag }}
