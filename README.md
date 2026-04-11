@@ -1,10 +1,28 @@
 # burrow
 
+[![CI](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml/badge.svg)](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/xenomorphingtv/burrow)](https://github.com/xenomorphingtv/burrow/releases/latest)
+[![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
+[![Platform: Linux](https://img.shields.io/badge/Platform-Linux-lightgrey?logo=linux&logoColor=white)]()
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 A personal task catalogue, runner, and scheduler with a terminal UI.
 
 Define named scripts in a TOML file, run them with a keystroke, stream their
 output live, chain them into pipelines, schedule them with cron, and browse
 the full run history, all without leaving the terminal.
+
+## Why
+
+Most developers accumulate a pile of scripts they run regularly - database seeds,
+deployment shortcuts, cleanup jobs, one-off utilities. `make` and `just` are
+project-scoped and file-centric. `cron` has no UI and no visibility into whether
+jobs succeed or fail. `systemd` timers are powerful but heavyweight for personal
+use.
+
+Burrow fills that gap. It lives in your home directory, gives every script a name
+and a description, logs every run automatically, and lets you schedule things
+without touching a crontab or writing a service file.
 
 <img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/c740085d-62fd-48e6-a9dc-c7a147e74f34" />
 
