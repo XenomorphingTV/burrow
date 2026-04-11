@@ -24,14 +24,13 @@ Burrow fills that gap. It lives in your home directory, gives every script a nam
 and a description, logs every run automatically, and lets you schedule things
 without touching a crontab or writing a service file.
 
-<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/c740085d-62fd-48e6-a9dc-c7a147e74f34" />
+<img width="941" height="508" alt="screenshot-2026-04-11_19-39-18" src="https://github.com/user-attachments/assets/1e8197fc-c265-41c2-b1b4-31bb0618b46b">
 
-<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/38cc743b-4e8d-4450-a0c3-7ecfc2e7fd57" />
+<img width="941" height="508" alt="screenshot-2026-04-11_19-42-18" src="https://github.com/user-attachments/assets/fc373f82-6878-4451-a765-881e3712834e" />
 
-<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/68e80d53-af4b-4063-ac04-f28b3163d592" />
+<img width="941" height="508" alt="screenshot-2026-04-11_19-40-58" src="https://github.com/user-attachments/assets/cb190985-651a-4ea3-a82c-76bf43003f97" />
 
-<img width="941" height="508" alt="image" src="https://github.com/user-attachments/assets/7b443896-2e84-418c-92cb-b90adc63aed0" />
-
+<img width="941" height="508" alt="screenshot-2026-04-11_19-41-22" src="https://github.com/user-attachments/assets/5123382e-011c-4f8c-b876-2775ed9da611" />
 
 ## Install
 
