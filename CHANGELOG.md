@@ -3,7 +3,7 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
-## [Unreleased]
+## [Released]
 
 ## [0.1.3] - 2026-04-13
 
@@ -18,8 +18,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 * Commands now run through `/bin/sh -c`, enabling `$VAR` expansion, pipes, redirects, and other shell features expected from a task runner
 * Input prompts parser — `[[task.inputs]]` array-of-tables TOML syntax now parsed correctly (BurntSushi/toml decodes these as `[]map[string]interface{}`, not `[]interface{}`)
 
-## [Released]
-
 ## [0.1.2] - 2026-04-12
 
 ### Added
@@ -29,6 +27,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Fixed
 
 * `depends_on` pipeline execution — dependency ordering in `burrow.toml` now resolves correctly when running tasks from the TUI
+
 
 ## [0.1.1] - 2026-04-11
 
