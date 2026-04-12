@@ -45,6 +45,7 @@ func (m Model) renderStatusBar() string {
 		StyleKey.Render("r") + " run",
 		StyleKey.Render("x") + " kill",
 		StyleKey.Render("l") + " clear",
+		StyleKey.Render("e") + " edit",
 		StyleKey.Render("a") + " add",
 		StyleKey.Render("tab") + " switch",
 		StyleKey.Render("/") + " filter",
@@ -84,6 +85,7 @@ func (m Model) renderHelpOverlay(base string) string {
   r               run selected task
   x               kill selected task
   l               clear log view
+  e               open task config in $EDITOR
   a               add new task
   enter / space   collapse/expand group
   tab             switch tab
