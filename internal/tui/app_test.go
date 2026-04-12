@@ -5,9 +5,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/runner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/runner"
 )
 
 // newTestModel returns a Model wired up for testing (no store, no scheduler).

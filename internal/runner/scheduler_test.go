@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 func testSchedulerConfig() *config.Config {

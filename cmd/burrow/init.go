@@ -5,7 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 func runInit() error {

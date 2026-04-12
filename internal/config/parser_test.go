@@ -316,6 +316,7 @@ func TestLooksLikeTask(t *testing.T) {
 		{"has env", map[string]interface{}{"env": map[string]interface{}{}}, true},
 		{"has depends_on", map[string]interface{}{"depends_on": []interface{}{}}, true},
 		{"has cwd", map[string]interface{}{"cwd": "/tmp"}, true},
+		{"has inputs", map[string]interface{}{"inputs": []interface{}{}}, true},
 		{"namespace group", map[string]interface{}{"seed": map[string]interface{}{"cmd": "node seed.js"}}, false},
 		{"unknown key only", map[string]interface{}{"foo": "bar"}, false},
 		{"empty", map[string]interface{}{}, false},
@@ -327,6 +328,113 @@ func TestLooksLikeTask(t *testing.T) {
 				t.Errorf("looksLikeTask() = %v, want %v", got, tc.want)
 			}
 		})
+	}
+}
+
+// inputs parsing tests
+
+func TestLoadFileTaskInputsArrayOfTables(t *testing.T) {
+	// [[tasks.x.inputs]] produces []map[string]interface{} in BurntSushi/toml —
+	// this is the format the example config uses and the original bug.
+	path := writeTempTOML(t, `
+[tasks.deploy]
+cmd = "deploy.sh --env $BURROW_ENV --tag $BURROW_TAG"
+description = "Deploy"
+
+[[tasks.deploy.inputs]]
+name   = "BURROW_ENV"
+prompt = "Environment?"
+options = ["staging", "prod"]
+
+[[tasks.deploy.inputs]]
+name   = "BURROW_TAG"
+prompt = "Git tag?"
+`)
+	cfg := newCfg()
+	if err := loadFile(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+	task, ok := cfg.Tasks["deploy"]
+	if !ok {
+		t.Fatal("expected task 'deploy'")
+	}
+	if len(task.Inputs) != 2 {
+		t.Fatalf("expected 2 inputs, got %d", len(task.Inputs))
+	}
+	if task.Inputs[0].Name != "BURROW_ENV" {
+		t.Errorf("input[0].name: got %q, want BURROW_ENV", task.Inputs[0].Name)
+	}
+	if task.Inputs[0].Prompt != "Environment?" {
+		t.Errorf("input[0].prompt: got %q", task.Inputs[0].Prompt)
+	}
+	if len(task.Inputs[0].Options) != 2 || task.Inputs[0].Options[0] != "staging" {
+		t.Errorf("input[0].options: got %v", task.Inputs[0].Options)
+	}
+	if task.Inputs[1].Name != "BURROW_TAG" {
+		t.Errorf("input[1].name: got %q, want BURROW_TAG", task.Inputs[1].Name)
+	}
+	if len(task.Inputs[1].Options) != 0 {
+		t.Errorf("input[1] should have no options, got %v", task.Inputs[1].Options)
+	}
+}
+
+func TestLoadFileTaskInputsNoOptions(t *testing.T) {
+	path := writeTempTOML(t, `
+[tasks.greet]
+cmd = "echo $BURROW_NAME"
+
+[[tasks.greet.inputs]]
+name   = "BURROW_NAME"
+prompt = "Your name?"
+`)
+	cfg := newCfg()
+	if err := loadFile(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+	task := cfg.Tasks["greet"]
+	if len(task.Inputs) != 1 {
+		t.Fatalf("expected 1 input, got %d", len(task.Inputs))
+	}
+	if task.Inputs[0].Name != "BURROW_NAME" || task.Inputs[0].Prompt != "Your name?" {
+		t.Errorf("unexpected input: %+v", task.Inputs[0])
+	}
+}
+
+func TestMergeConfigsInputsOverride(t *testing.T) {
+	base := &Config{
+		Tasks: map[string]Task{
+			"deploy": {Inputs: []TaskInput{{Name: "OLD", Prompt: "Old prompt?"}}},
+		},
+		Schedules: make(map[string]Schedule),
+	}
+	local := &Config{
+		Tasks: map[string]Task{
+			"deploy": {Inputs: []TaskInput{{Name: "NEW", Prompt: "New prompt?"}}},
+		},
+		Schedules: make(map[string]Schedule),
+	}
+	mergeConfigs(base, local)
+	inputs := base.Tasks["deploy"].Inputs
+	if len(inputs) != 1 || inputs[0].Name != "NEW" {
+		t.Errorf("local inputs should replace base inputs; got %+v", inputs)
+	}
+}
+
+func TestMergeConfigsInputsPreservedWhenLocalEmpty(t *testing.T) {
+	base := &Config{
+		Tasks: map[string]Task{
+			"deploy": {Inputs: []TaskInput{{Name: "ENV", Prompt: "Env?"}}},
+		},
+		Schedules: make(map[string]Schedule),
+	}
+	local := &Config{
+		Tasks:     map[string]Task{"deploy": {Cmd: "new-cmd"}},
+		Schedules: make(map[string]Schedule),
+	}
+	mergeConfigs(base, local)
+	inputs := base.Tasks["deploy"].Inputs
+	if len(inputs) != 1 || inputs[0].Name != "ENV" {
+		t.Errorf("base inputs should be preserved when local has none; got %+v", inputs)
 	}
 }
 

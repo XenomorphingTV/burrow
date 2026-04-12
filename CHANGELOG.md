@@ -3,7 +3,32 @@
 All notable changes to this project will be documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+## [0.1.3] - 2026-04-13
+
+### Added
+
+* Interactive task inputs — define `inputs` on any task to have burrow prompt for values at run time before execution; supports free-text and option-select prompts; values injected as environment variables
+* Task status badges now reflect run history on startup — dots show the last known result (ok/failed) rather than always starting idle
+* Keybinding documentation — all binds now documented in the help overlay (`?`), status bar (context-sensitive per tab), inline hint lines, and README
+
+### Fixed
+
+* Commands now run through `/bin/sh -c`, enabling `$VAR` expansion, pipes, redirects, and other shell features expected from a task runner
+* Input prompts parser — `[[task.inputs]]` array-of-tables TOML syntax now parsed correctly (BurntSushi/toml decodes these as `[]map[string]interface{}`, not `[]interface{}`)
+
 ## [Released]
+
+## [0.1.2] - 2026-04-12
+
+### Added
+
+* Edit task — press `e` on any selected task to open its source file at the correct line in `$EDITOR` directly from the TUI
+
+### Fixed
+
+* `depends_on` pipeline execution — dependency ordering in `burrow.toml` now resolves correctly when running tasks from the TUI
 
 ## [0.1.1] - 2026-04-11
 

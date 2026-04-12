@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/xenomorphingtv/burrow/internal/config"
 )
 
 func (m Model) renderTasksTab() string {
@@ -22,6 +22,9 @@ func (m Model) renderTasksTab() string {
 	)
 	if m.addTaskMode {
 		return body + "\n" + m.renderAddTaskPanel()
+	}
+	if m.promptMode {
+		return body + "\n" + m.renderPromptPanel()
 	}
 	return body
 }
@@ -109,11 +112,13 @@ func (m Model) renderSidebar(width int) string {
 	}
 
 	// Fill remaining height
-	addPanelHeight := 0
+	extraPanelHeight := 0
 	if m.addTaskMode {
-		addPanelHeight = 9
+		extraPanelHeight = 9
+	} else if m.promptMode {
+		extraPanelHeight = m.promptPanelHeight()
 	}
-	sidebarHeight := m.height - 4 - addPanelHeight
+	sidebarHeight := m.height - 4 - extraPanelHeight
 	for len(lines) < sidebarHeight {
 		lines = append(lines, StyleTaskRowNormal.Width(width).Render(""))
 	}
@@ -187,7 +192,7 @@ func (m Model) renderAddTaskPanel() string {
 
 	sep := StyleLogDim.Render("  " + strings.Repeat("─", m.width-4))
 	title := StyleSectionTitle.Render("  add task") +
-		StyleLogDim.Render("  (tab=next · enter=save · esc=cancel · saves to global config)")
+		StyleLogDim.Render("  (tab=next · shift+tab=prev · enter=save · esc=cancel · saves to global config)")
 
 	var fieldLines []string
 	for i, input := range m.addTaskInputs {
@@ -213,4 +218,58 @@ func (m Model) renderAddTaskPanel() string {
 		lines = append(lines, "")
 	}
 	return strings.Join(lines[:9], "\n")
+}
+
+func (m Model) renderPromptPanel() string {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok {
+		return ""
+	}
+
+	sep := StyleLogDim.Render("  " + strings.Repeat("─", m.width-4))
+	title := StyleSectionTitle.Render(fmt.Sprintf("  %s  inputs  (%d/%d)", m.promptTaskName, m.promptStep+1, len(task.Inputs))) +
+		StyleLogDim.Render("  (enter=confirm · esc=cancel)")
+
+	var lines []string
+	lines = append(lines, sep, title, "")
+
+	if m.promptStep < len(task.Inputs) {
+		inp := task.Inputs[m.promptStep]
+		if len(inp.Options) > 0 {
+			label := StyleLogDim.Render("  " + inp.Prompt)
+			lines = append(lines, label)
+			// Cap visible options to avoid exceeding panel height
+			maxVisible := m.promptPanelHeight() - 4
+			if maxVisible < 1 {
+				maxVisible = 1
+			}
+			start := 0
+			if m.promptOptCursor >= maxVisible {
+				start = m.promptOptCursor - maxVisible + 1
+			}
+			end := start + maxVisible
+			if end > len(inp.Options) {
+				end = len(inp.Options)
+			}
+			for i := start; i < end; i++ {
+				opt := inp.Options[i]
+				if i == m.promptOptCursor {
+					lines = append(lines, StyleTaskRowSelected.Width(m.width-4).Render("  > "+opt))
+				} else {
+					lines = append(lines, StyleTaskRowNormal.Width(m.width-4).Render("    "+opt))
+				}
+			}
+		} else {
+			label := lipgloss.NewStyle().
+				Foreground(lipgloss.Color(colorPurple)).Bold(true).
+				Render(fmt.Sprintf("  %-14s", inp.Prompt+":"))
+			lines = append(lines, label+m.promptTextInput.View())
+		}
+	}
+
+	height := m.promptPanelHeight()
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines[:height], "\n")
 }

@@ -12,7 +12,7 @@ builds:
     env:
       - CGO_ENABLED=0
     ldflags:
-      - -s -w -X github.com/xenomorphingtv/burrow/internal/version.Version={{.Version}}
+      - -s -w -X github.com/XenomorphingTV/burrow/internal/version.Version={{.Version}}
     goos:
       - linux
     goarch:

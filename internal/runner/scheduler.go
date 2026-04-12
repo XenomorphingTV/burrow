@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/robfig/cron/v3"
-	"github.com/xenomorphingtv/burrow/internal/config"
 )
 
 // RunFunc is called when a scheduled task fires.

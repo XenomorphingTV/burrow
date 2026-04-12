@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 // splitCommand tests
@@ -208,8 +208,9 @@ func TestExecutorInvalidCommand(t *testing.T) {
 }
 
 func TestExecutorEnvVars(t *testing.T) {
+	// Executor runs through /bin/sh -c so $VAR references in the command expand directly.
 	task := config.Task{
-		Cmd: "sh -c 'echo $BURROW_TEST_VAR'",
+		Cmd: "echo $BURROW_TEST_VAR",
 		Env: map[string]string{"BURROW_TEST_VAR": "hello-from-env"},
 	}
 	exec := NewExecutor("test-env", task, "manual", t.TempDir(), nil, nil)
@@ -232,5 +233,34 @@ func TestExecutorEnvVars(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected env var in output, got: %v", lines)
+	}
+}
+
+func TestExecutorShellPipe(t *testing.T) {
+	task := config.Task{Cmd: "echo hello-pipe | cat"}
+	exec := NewExecutor("test-pipe", task, "manual", t.TempDir(), nil, nil)
+	exec.Start()
+
+	var lines []string
+	var exitCode int
+	for line := range exec.LogCh() {
+		if line.Done {
+			exitCode = line.ExitCode
+			break
+		}
+		lines = append(lines, line.Text)
+	}
+	if exitCode != 0 {
+		t.Errorf("expected exit 0, got %d", exitCode)
+	}
+	found := false
+	for _, l := range lines {
+		if strings.Contains(l, "hello-pipe") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'hello-pipe' in output via pipe, got: %v", lines)
 	}
 }

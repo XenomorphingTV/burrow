@@ -2,4 +2,4 @@
 // The Makefile injects the real value via -ldflags; the default is "dev".
 package version
 
-var Version = "dev"
+var Version = "0.1.3"

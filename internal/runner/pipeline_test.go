@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 func TestResolveSingleTask(t *testing.T) {
