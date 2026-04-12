@@ -71,7 +71,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.tab == TabTasks {
 			name := m.selectedTaskName()
 			if name != "" {
-				return m, m.startTask(name, "manual")
+				return m, m.startPipeline(name, "manual")
 			}
 		}
 

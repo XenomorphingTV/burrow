@@ -102,6 +102,7 @@ type Model struct {
 
 	collapsedGroups map[string]bool
 	onFailureRuns   map[string]bool // tracks tasks started as on_failure to prevent recursion
+	pipelineQueues  map[string][]string
 
 	width  int
 	height int
@@ -181,6 +182,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		disabledSchedules: disabledSchedules,
 		collapsedGroups:   make(map[string]bool),
 		onFailureRuns:     make(map[string]bool),
+		pipelineQueues:    make(map[string][]string),
 		scheduleEditInput: ti,
 		addTaskInputs:     addInputs,
 	}
@@ -265,7 +267,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case ScheduledRunMsg:
-		return m, m.startTask(msg.TaskName, msg.Trigger)
+		return m, m.startPipeline(msg.TaskName, msg.Trigger)
 
 	case logLineMsg:
 		return m.handleLogLine(msg)
@@ -371,6 +373,24 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 
 		var cmds []tea.Cmd
 		cmds = append(cmds, loadHistory(m.st))
+
+		if msg.ExitCode == 0 {
+			// Advance the pipeline if one is queued behind this task.
+			if remaining, ok := m.pipelineQueues[name]; ok {
+				delete(m.pipelineQueues, name)
+				if len(remaining) > 0 {
+					next := remaining[0]
+					if len(remaining) > 1 {
+						m.pipelineQueues[next] = remaining[1:]
+					}
+					cmds = append(cmds, m.startTask(next, "pipeline"))
+				}
+			}
+		} else {
+			// Clear any pending continuation on failure.
+			delete(m.pipelineQueues, name)
+		}
+
 		if onFailure != "" && !m.onFailureRuns[name] {
 			cmds = append(cmds, m.fireOnFailure(name, onFailure))
 		}
@@ -582,6 +602,22 @@ func (m Model) startTask(name, trigger string) tea.Cmd {
 	m.scrollLock = false
 
 	return awaitLog(exec.LogCh())
+}
+
+// startPipeline resolves the full depends_on chain for target and runs each
+// task in order, chaining them through pipelineQueues as each one completes.
+func (m Model) startPipeline(target, trigger string) tea.Cmd {
+	ordered, err := runner.Resolve(target, m.cfg.Tasks)
+	if err != nil || len(ordered) == 0 {
+		return nil
+	}
+	if len(ordered) == 1 {
+		return m.startTask(ordered[0], trigger)
+	}
+	// Store the remaining chain. When ordered[0] finishes, handleLogLine will
+	// start ordered[1], set pipelineQueues[ordered[1]] = ordered[2:], and so on.
+	m.pipelineQueues[ordered[0]] = ordered[1:]
+	return m.startTask(ordered[0], "pipeline")
 }
 
 // StartTaskExternal allows external code (scheduler) to start a task.
