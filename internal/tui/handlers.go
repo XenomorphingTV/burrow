@@ -2,6 +2,9 @@ package tui
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -171,6 +174,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.keys.EditSchedule):
+		if m.tab == TabTasks {
+			name := m.selectedTaskName()
+			if name == "" {
+				break
+			}
+			path := configFileForTask(name)
+			editor := os.Getenv("EDITOR")
+			if editor == "" {
+				editor = "vi"
+			}
+			c := exec.Command(editor, path)
+			return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
+		}
 		if m.tab == TabSchedule {
 			names := m.sortedScheduleNames()
 			if m.scheduleSelected < len(names) {
@@ -337,6 +353,20 @@ func (m Model) handleAddTask(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.addTaskInputs[m.addTaskStep], cmd = m.addTaskInputs[m.addTaskStep].Update(msg)
 		return m, cmd
 	}
+}
+
+// configFileForTask returns the path of the config file that defines name.
+// It prefers the local burrow.toml; falls back to the global tasks.toml.
+func configFileForTask(name string) string {
+	if local, err := config.LoadLocal(); err == nil {
+		if _, ok := local.Tasks[name]; ok {
+			if abs, err := filepath.Abs("burrow.toml"); err == nil {
+				return abs
+			}
+			return "burrow.toml"
+		}
+	}
+	return filepath.Join(config.DefaultConfigDir(), "tasks.toml")
 }
 
 func (m Model) submitAddTask() (tea.Model, tea.Cmd) {
