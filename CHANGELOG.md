@@ -5,6 +5,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Released]
 
+## [0.1.2] - 2026-04-12
+
+### Added
+
+* Edit task — press `e` on any selected task to open its source file at the correct line in `$EDITOR` directly from the TUI
+
+### Fixed
+
+* `depends_on` pipeline execution — dependency ordering in `burrow.toml` now resolves correctly when running tasks from the TUI
+
+
 ## [0.1.1] - 2026-04-11
 
 ### Added
