@@ -5,13 +5,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/runner"
+	"github.com/XenomorphingTV/burrow/internal/store"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/runner"
-	"github.com/xenomorphingtv/burrow/internal/store"
 )
 
 // TaskStatus represents the current state of a task.
@@ -100,6 +100,17 @@ type Model struct {
 
 	confirmClearHistory bool
 
+	// prompt-for-inputs mode
+	promptMode      bool
+	promptTaskName  string
+	promptStep      int
+	promptTextInput textinput.Model
+	promptOptCursor int
+	promptValues    map[string]string
+
+	// pendingEnv holds prompt-collected values by task name until the executor fires
+	pendingEnv map[string]map[string]string
+
 	collapsedGroups map[string]bool
 	onFailureRuns   map[string]bool // tracks tasks started as on_failure to prevent recursion
 	pipelineQueues  map[string][]string
@@ -183,6 +194,8 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		collapsedGroups:   make(map[string]bool),
 		onFailureRuns:     make(map[string]bool),
 		pipelineQueues:    make(map[string][]string),
+		promptValues:      make(map[string]string),
+		pendingEnv:        make(map[string]map[string]string),
 		scheduleEditInput: ti,
 		addTaskInputs:     addInputs,
 	}
@@ -252,6 +265,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.promptMode {
+			return m.handlePromptKey(msg)
+		}
 		if m.confirmClearHistory {
 			return m.handleConfirmClear(msg)
 		}
@@ -278,6 +294,33 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.historySelected = 0
 		}
 		m.updateHistoryViewport()
+
+		// Seed task status badges from history so they reflect past runs on startup.
+		// history is newest-first; the first record seen per task name is its latest run.
+		seen := make(map[string]bool)
+		for _, r := range m.history {
+			if seen[r.TaskName] {
+				continue
+			}
+			seen[r.TaskName] = true
+			for i, t := range m.tasks {
+				if t.Name != r.TaskName {
+					continue
+				}
+				// Don't overwrite a live running/success/failed status from this session.
+				if t.Status != StatusIdle {
+					break
+				}
+				if r.ExitCode == 0 {
+					m.tasks[i].Status = StatusSuccess
+				} else {
+					m.tasks[i].Status = StatusFailed
+				}
+				m.tasks[i].ExitCode = r.ExitCode
+				m.tasks[i].DurationMs = r.DurationMs
+				break
+			}
+		}
 		return m, nil
 
 	case statsLoadedMsg:
@@ -329,6 +372,27 @@ func (m Model) View() string {
 	return view
 }
 
+// promptPanelHeight returns the number of lines the prompt panel occupies.
+// sep(1) + title(1) + blank(1) = 3 base lines, then 1 for a text field or N for options.
+func (m Model) promptPanelHeight() int {
+	if !m.promptMode || m.promptTaskName == "" {
+		return 0
+	}
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok || m.promptStep >= len(task.Inputs) {
+		return 4
+	}
+	inp := task.Inputs[m.promptStep]
+	if len(inp.Options) > 0 {
+		h := 4 + len(inp.Options) // 3 base + 1 label + N options
+		if h > 12 {
+			h = 12
+		}
+		return h
+	}
+	return 4 // 3 base + 1 text field line
+}
+
 func (m *Model) recalcViewport() {
 	sidebarWidth := 24
 	dividerWidth := 1
@@ -336,12 +400,14 @@ func (m *Model) recalcViewport() {
 	if mainWidth < 10 {
 		mainWidth = 10
 	}
-	addPanelHeight := 0
+	extraPanelHeight := 0
 	if m.addTaskMode {
-		addPanelHeight = 9
+		extraPanelHeight = 9
+	} else if m.promptMode {
+		extraPanelHeight = m.promptPanelHeight()
 	}
-	// height - title(1) - tabbar(2) - loghead(3) - statusbar(1) - addPanel = height - 7 - addPanel
-	vpHeight := m.height - 7 - addPanelHeight
+	// height - title(1) - tabbar(2) - loghead(3) - statusbar(1) - extraPanel = height - 7 - extraPanel
+	vpHeight := m.height - 7 - extraPanelHeight
 	if vpHeight < 3 {
 		vpHeight = 3
 	}
@@ -565,6 +631,19 @@ func (m Model) startTask(name, trigger string) tea.Cmd {
 	task, ok := m.cfg.Tasks[name]
 	if !ok {
 		return nil
+	}
+
+	// Inject any prompt-collected values as task env overrides.
+	if extras, ok := m.pendingEnv[name]; ok {
+		merged := make(map[string]string, len(task.Env)+len(extras))
+		for k, v := range task.Env {
+			merged[k] = v
+		}
+		for k, v := range extras {
+			merged[k] = v
+		}
+		task.Env = merged
+		delete(m.pendingEnv, name)
 	}
 
 	// External tasks are launched in a terminal emulator — no output capture.

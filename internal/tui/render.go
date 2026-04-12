@@ -41,16 +41,38 @@ func (m Model) renderStatusBar() string {
 		return StyleStatusBar.Width(m.width).Render(prompt)
 	}
 
-	keyHints := []string{
-		StyleKey.Render("r") + " run",
-		StyleKey.Render("x") + " kill",
-		StyleKey.Render("l") + " clear",
-		StyleKey.Render("e") + " edit",
-		StyleKey.Render("a") + " add",
-		StyleKey.Render("tab") + " switch",
-		StyleKey.Render("/") + " filter",
-		StyleKey.Render("?") + " help",
-		StyleKey.Render("q") + " quit",
+	var keyHints []string
+	switch m.tab {
+	case TabHistory:
+		keyHints = []string{
+			StyleKey.Render("↑/↓") + " navigate",
+			StyleKey.Render("pgup/pgdn") + " scroll",
+			StyleKey.Render("D") + " clear history",
+			StyleKey.Render("tab") + " switch",
+			StyleKey.Render("?") + " help",
+			StyleKey.Render("q") + " quit",
+		}
+	case TabSchedule:
+		keyHints = []string{
+			StyleKey.Render("↑/↓") + " navigate",
+			StyleKey.Render("enter") + " toggle",
+			StyleKey.Render("e") + " edit cron",
+			StyleKey.Render("tab") + " switch",
+			StyleKey.Render("?") + " help",
+			StyleKey.Render("q") + " quit",
+		}
+	default:
+		keyHints = []string{
+			StyleKey.Render("r") + " run",
+			StyleKey.Render("x") + " kill",
+			StyleKey.Render("l") + " clear",
+			StyleKey.Render("e") + " edit",
+			StyleKey.Render("a") + " add",
+			StyleKey.Render("tab") + " switch",
+			StyleKey.Render("/") + " filter",
+			StyleKey.Render("?") + " help",
+			StyleKey.Render("q") + " quit",
+		}
 	}
 	left := strings.Join(keyHints, "  ")
 
@@ -80,17 +102,20 @@ func (m Model) renderHelpOverlay(base string) string {
 
   ↑ / k           navigate up
   ↓ / j           navigate down
-  pgup / ctrl+u   scroll log up
-  pgdn / ctrl+d   scroll log down
+  pgup / ctrl+u   scroll up
+  pgdn / ctrl+d   scroll down
   r               run selected task
   x               kill selected task
   l               clear log view
-  e               open task config in $EDITOR
+  e               open task in $EDITOR  (tasks tab)
+  e               edit cron expression  (schedule tab)
   a               add new task
-  enter / space   collapse/expand group
+  enter / space   collapse/expand group (tasks tab)
+  enter / space   toggle schedule on/off (schedule tab)
+  D               clear all run history  (history tab)
   tab             switch tab
   /               filter by name/tag
-  esc             exit filter/add mode
+  esc             exit filter / add / prompt mode
   ?               toggle this help
   q / ctrl+c      quit`
 

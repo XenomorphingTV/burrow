@@ -145,6 +145,27 @@ external    = true
 tags        = ["util"]
 
 
+# ── Input prompts ────────────────────────────────────────────────────────────
+#
+# inputs = [...] causes burrow to prompt for values before running the task.
+# Each input injects its value as an environment variable named by `name`.
+# Provide `options` for a selection list, or omit for free-text entry.
+
+[tasks.greet]
+cmd         = "echo \"Hello, $BURROW_NAME! You chose: $BURROW_ENV\""
+description = "Greet someone — demonstrates input prompts"
+tags        = ["example"]
+
+[[tasks.greet.inputs]]
+name   = "BURROW_NAME"
+prompt = "Your name?"
+
+[[tasks.greet.inputs]]
+name    = "BURROW_ENV"
+prompt  = "Environment?"
+options = ["development", "staging", "production"]
+
+
 # ── Schedules ────────────────────────────────────────────────────────────────
 #
 # Standard 5-field cron expressions.

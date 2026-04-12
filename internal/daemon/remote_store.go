@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/xenomorphingtv/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/store"
 )
 
 // RemoteStore implements store.Storer by forwarding every call to the daemon

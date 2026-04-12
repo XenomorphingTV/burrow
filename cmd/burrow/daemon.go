@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/xenomorphingtv/burrow/internal/daemon"
+	"github.com/XenomorphingTV/burrow/internal/daemon"
 )
 
 func runDaemon(args []string) error {

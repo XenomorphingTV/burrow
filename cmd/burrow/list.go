@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 func runList() error {

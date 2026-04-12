@@ -8,11 +8,11 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/robfig/cron/v3"
-	"github.com/xenomorphingtv/burrow/internal/config"
 )
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -70,9 +70,19 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Run):
 		if m.tab == TabTasks {
 			name := m.selectedTaskName()
-			if name != "" {
-				return m, m.startPipeline(name, "manual")
+			if name == "" {
+				break
 			}
+			if task := m.cfg.Tasks[name]; len(task.Inputs) > 0 {
+				m.promptMode = true
+				m.promptTaskName = name
+				m.promptStep = 0
+				m.promptValues = make(map[string]string)
+				m = m.initPromptStep()
+				m.recalcViewport()
+				return m, textinput.Blink
+			}
+			return m, m.startPipeline(name, "manual")
 		}
 
 	case key.Matches(msg, m.keys.Kill):
@@ -507,4 +517,113 @@ func (m Model) submitAddTask() (tea.Model, tea.Cmd) {
 	m.recalcViewport()
 
 	return m, nil
+}
+
+// initPromptStep configures the prompt widget for the current step and returns the updated model.
+func (m Model) initPromptStep() Model {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok || m.promptStep >= len(task.Inputs) {
+		return m
+	}
+	inp := task.Inputs[m.promptStep]
+	if len(inp.Options) > 0 {
+		m.promptOptCursor = 0
+		m.promptTextInput.Blur()
+	} else {
+		ti := textinput.New()
+		ti.Placeholder = inp.Prompt
+		ti.CharLimit = 256
+		ti.Width = 40
+		ti.Focus()
+		m.promptTextInput = ti
+		m.promptOptCursor = 0
+	}
+	return m
+}
+
+func (m Model) handlePromptKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok {
+		m.promptMode = false
+		return m, nil
+	}
+
+	switch msg.String() {
+	case "ctrl+c":
+		return m, tea.Quit
+
+	case "esc":
+		m.promptMode = false
+		m.promptValues = make(map[string]string)
+		m.recalcViewport()
+		return m, nil
+
+	case "enter":
+		return m.advancePromptStep()
+	}
+
+	if m.promptStep >= len(task.Inputs) {
+		return m, nil
+	}
+	inp := task.Inputs[m.promptStep]
+
+	if len(inp.Options) > 0 {
+		switch msg.String() {
+		case "up", "k":
+			if m.promptOptCursor > 0 {
+				m.promptOptCursor--
+			}
+		case "down", "j":
+			if m.promptOptCursor < len(inp.Options)-1 {
+				m.promptOptCursor++
+			}
+		}
+		return m, nil
+	}
+
+	// Free-text: forward all other keys to the text input.
+	var cmd tea.Cmd
+	m.promptTextInput, cmd = m.promptTextInput.Update(msg)
+	return m, cmd
+}
+
+func (m Model) advancePromptStep() (tea.Model, tea.Cmd) {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok {
+		m.promptMode = false
+		return m, nil
+	}
+	if m.promptStep >= len(task.Inputs) {
+		m.promptMode = false
+		return m, nil
+	}
+
+	inp := task.Inputs[m.promptStep]
+	var value string
+	if len(inp.Options) > 0 {
+		if m.promptOptCursor < len(inp.Options) {
+			value = inp.Options[m.promptOptCursor]
+		}
+	} else {
+		value = strings.TrimSpace(m.promptTextInput.Value())
+	}
+	m.promptValues[inp.Name] = value
+	m.promptStep++
+
+	if m.promptStep >= len(task.Inputs) {
+		// All inputs collected — store and launch.
+		collected := make(map[string]string, len(m.promptValues))
+		for k, v := range m.promptValues {
+			collected[k] = v
+		}
+		m.pendingEnv[m.promptTaskName] = collected
+		m.promptMode = false
+		m.promptValues = make(map[string]string)
+		m.recalcViewport()
+		return m, m.startPipeline(m.promptTaskName, "manual")
+	}
+
+	m = m.initPromptStep()
+	m.recalcViewport()
+	return m, textinput.Blink
 }

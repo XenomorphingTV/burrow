@@ -8,6 +8,9 @@
 
 A personal task catalogue, runner, and scheduler with a terminal UI.
 
+![showcase](https://github.com/user-attachments/assets/34e2bb93-3a44-49dd-8908-91fd0fa49170)
+
+
 Define named scripts in a TOML file, run them with a keystroke, stream their
 output live, chain them into pipelines, schedule them with cron, and browse
 the full run history, all without leaving the terminal.
@@ -24,17 +27,15 @@ Burrow fills that gap. It lives in your home directory, gives every script a nam
 and a description, logs every run automatically, and lets you schedule things
 without touching a crontab or writing a service file.
 
-<img width="941" height="508" alt="screenshot-2026-04-11_19-39-18" src="https://github.com/user-attachments/assets/1e8197fc-c265-41c2-b1b4-31bb0618b46b">
-
-<img width="941" height="508" alt="screenshot-2026-04-11_19-42-18" src="https://github.com/user-attachments/assets/fc373f82-6878-4451-a765-881e3712834e" />
-
-<img width="941" height="508" alt="screenshot-2026-04-11_19-40-58" src="https://github.com/user-attachments/assets/cb190985-651a-4ea3-a82c-76bf43003f97" />
-
-<img width="941" height="508" alt="screenshot-2026-04-11_19-41-22" src="https://github.com/user-attachments/assets/5123382e-011c-4f8c-b876-2775ed9da611" />
-
 ## Install
 
 Requires Go 1.22+.
+You can use Go to install it directly:
+
+```bash
+go install github.com/XenomorphingTV/burrow/cmd/burrow@latest
+```
+Or you can clone it and build it yourself: 
 
 ```bash
 git clone https://github.com/xenomorphingtv/burrow
@@ -71,22 +72,6 @@ burrow daemon status    # show daemon uptime and upcoming scheduled runs
 burrow help             # full usage reference
 burrow version          # print version
 ```
-
-
-## TUI keys
-
-| Key | Action |
-|---|---|
-| `j` / `k` | Navigate |
-| `r` | Run selected task |
-| `x` | Kill running task |
-| `l` | Clear log view |
-| `/` | Filter by name or tag |
-| `a` | Add a new task |
-| `tab` | Switch tab (tasks / schedule / history / stats) |
-| `?` | Help overlay |
-| `q` | Quit |
-
 
 ## Config
 

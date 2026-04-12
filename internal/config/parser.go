@@ -171,7 +171,7 @@ func loadFile(cfg *Config, path string) error {
 func looksLikeTask(m map[string]interface{}) bool {
 	for k := range m {
 		switch k {
-		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure":
+		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs":
 			return true
 		}
 	}
@@ -225,6 +225,36 @@ func taskFromMap(m map[string]interface{}) Task {
 	if v, ok := m["external"].(bool); ok {
 		t.External = v
 	}
+	// BurntSushi/toml decodes [[array.of.tables]] as []map[string]interface{},
+	// but inline arrays decode as []interface{}. Handle both.
+	var inputMaps []map[string]interface{}
+	switch v := m["inputs"].(type) {
+	case []map[string]interface{}:
+		inputMaps = v
+	case []interface{}:
+		for _, ri := range v {
+			if im, ok := ri.(map[string]interface{}); ok {
+				inputMaps = append(inputMaps, im)
+			}
+		}
+	}
+	for _, im := range inputMaps {
+		var inp TaskInput
+		if v, ok := im["name"].(string); ok {
+			inp.Name = v
+		}
+		if v, ok := im["prompt"].(string); ok {
+			inp.Prompt = v
+		}
+		if opts, ok := im["options"].([]interface{}); ok {
+			for _, o := range opts {
+				if s, ok := o.(string); ok {
+					inp.Options = append(inp.Options, s)
+				}
+			}
+		}
+		t.Inputs = append(t.Inputs, inp)
+	}
 	return t
 }
 
@@ -271,6 +301,9 @@ func mergeConfigs(base, local *Config) {
 			}
 			if len(localTask.Notify) > 0 {
 				baseTask.Notify = localTask.Notify
+			}
+			if len(localTask.Inputs) > 0 {
+				baseTask.Inputs = localTask.Inputs
 			}
 			if baseTask.Env == nil {
 				baseTask.Env = make(map[string]string)

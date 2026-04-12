@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/runner"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/runner"
 )
 
 func newGroupedModel(t *testing.T) Model {

@@ -1,13 +1,15 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"os"
+	"strings"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/daemon"
-	"github.com/xenomorphingtv/burrow/internal/runner"
-	"github.com/xenomorphingtv/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/daemon"
+	"github.com/XenomorphingTV/burrow/internal/runner"
+	"github.com/XenomorphingTV/burrow/internal/store"
 )
 
 func runHeadless(taskName string) error {
@@ -45,6 +47,24 @@ func runHeadless(taskName string) error {
 	exitCode := 0
 	for i, name := range ordered {
 		t := cfg.Tasks[name]
+
+		// Collect runtime inputs via stdin if the task defines them.
+		if len(t.Inputs) > 0 {
+			fmt.Printf("==> Inputs for task: %s\n", name)
+			extras, err := collectInputsHeadless(t.Inputs)
+			if err != nil {
+				return fmt.Errorf("collect inputs for %s: %w", name, err)
+			}
+			merged := make(map[string]string, len(t.Env)+len(extras))
+			for k, v := range t.Env {
+				merged[k] = v
+			}
+			for k, v := range extras {
+				merged[k] = v
+			}
+			t.Env = merged
+		}
+
 		trigger := "manual"
 		if i < len(ordered)-1 {
 			trigger = "pipeline"
@@ -80,6 +100,42 @@ func runHeadless(taskName string) error {
 
 	os.Exit(exitCode)
 	return nil
+}
+
+// collectInputsHeadless prompts for each task input on stdin and returns the collected values.
+func collectInputsHeadless(inputs []config.TaskInput) (map[string]string, error) {
+	values := make(map[string]string, len(inputs))
+	reader := bufio.NewReader(os.Stdin)
+	for _, inp := range inputs {
+		if len(inp.Options) > 0 {
+			fmt.Printf("  %s\n", inp.Prompt)
+			for i, opt := range inp.Options {
+				fmt.Printf("    [%d] %s\n", i+1, opt)
+			}
+			fmt.Printf("  choice (1-%d): ", len(inp.Options))
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return nil, fmt.Errorf("read input for %s: %w", inp.Name, err)
+			}
+			line = strings.TrimSpace(line)
+			chosen := inp.Options[0] // default to first option
+			for i, opt := range inp.Options {
+				if line == opt || line == fmt.Sprintf("%d", i+1) {
+					chosen = opt
+					break
+				}
+			}
+			values[inp.Name] = chosen
+		} else {
+			fmt.Printf("  %s: ", inp.Prompt)
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				return nil, fmt.Errorf("read input for %s: %w", inp.Name, err)
+			}
+			values[inp.Name] = strings.TrimSpace(line)
+		}
+	}
+	return values, nil
 }
 
 // runOnFailure executes the on_failure value for a failed task.

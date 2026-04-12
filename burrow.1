@@ -1,4 +1,4 @@
-.TH BURROW 1 "2026-04-11" "burrow" "User Commands"
+.TH BURROW 1 "2026-04-13" "burrow" "User Commands"
 .SH NAME
 burrow \- personal task catalogue, runner, and scheduler
 .SH SYNOPSIS
@@ -95,7 +95,38 @@ env         = { NODE_ENV = "development" }
 tags        = ["db", "setup"]
 depends_on  = ["other-task"]   # run other-task first (pipeline)
 on_failure  = "notify-slack"   # task name or shell command on failure
+
+[[tasks.db-seed.inputs]]
+name    = "target"
+prompt  = "Which environment?"
+options = ["dev", "staging", "prod"]   # omit for free-text
+
+[[tasks.db-seed.inputs]]
+name   = "confirm"
+prompt = "Confirmation message"
 .fi
+.PP
+Commands are executed via
+.B /bin/sh \-c
+so shell features such as
+.BR $VAR
+expansion, pipes, and redirects work as expected.
+.PP
+Each
+.B inputs
+entry prompts the user before the task runs and injects the value as an
+environment variable named by
+.IR name .
+Omit
+.B options
+for a free-text prompt.
+Use
+.B $name
+inside
+.B cmd
+or
+.B env
+values to reference the collected value.
 .SS Schedules
 .nf
 [schedules.nightly-seed]
@@ -114,9 +145,10 @@ l	Clear log view
 Tab	Switch pane tab (tasks / schedule / history)
 /	Fuzzy filter by name or tag
 a	Add task
-e	Edit schedule cron expression
+e (tasks tab)	Open task source file in $EDITOR at the task definition line
+e (schedule tab)	Edit schedule cron expression inline
 Enter/Space	Toggle schedule enabled/disabled
-D	Clear task history
+D	Clear task history (history tab)
 ?	Toggle help overlay
 pgup/ctrl+u	Scroll log up
 pgdn/ctrl+d	Scroll log down
@@ -141,7 +173,9 @@ Per-run log files, named by task and timestamp.
 .B EDITOR
 Used by
 .B burrow init
-to open the config file after scaffolding.
+to open the config file after scaffolding, and by the
+.B e
+keybinding (tasks tab) to open a task's source file at its definition line.
 .SH EXAMPLES
 Launch the TUI:
 .PP
@@ -179,6 +213,6 @@ burrow daemon status
 .BR systemctl (1),
 .BR make (1)
 .SH BUGS
-Report issues at https://github.com/xenomorphingtv/burrow/issues
+Report issues at https://github.com/XenomorphingTV/burrow/issues
 .SH AUTHOR
 Written by the Xenomorphing

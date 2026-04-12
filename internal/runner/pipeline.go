@@ -3,7 +3,7 @@ package runner
 import (
 	"fmt"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 // Resolve returns the ordered task execution list for the target task,

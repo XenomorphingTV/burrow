@@ -10,7 +10,7 @@ import (
 	"syscall"
 	"text/template"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
 // Install writes the OS service file without starting the daemon.

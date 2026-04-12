@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/xenomorphingtv/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/store"
 )
 
 // Request is a command sent to the daemon over the Unix socket.

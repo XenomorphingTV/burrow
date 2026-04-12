@@ -17,10 +17,14 @@ func (m Model) renderHistoryTab() string {
 
 func (m Model) renderHistorySidebar(width int) string {
 	bodyHeight := m.height - 4
-	rowsAvail := bodyHeight - 1 // 1 line for the header
+	rowsAvail := bodyHeight - 2 // header + hint line
+
+	hintLine := StyleLogDim.Render("  ") +
+		StyleKey.Render("D") + StyleLogDim.Render("  clear history")
 
 	var lines []string
 	lines = append(lines, StyleSidebarHead.Width(width).Render("HISTORY"))
+	lines = append(lines, StyleTaskRowNormal.Width(width).Render(hintLine))
 
 	if len(m.history) == 0 {
 		lines = append(lines, StyleLogDim.Width(width).Render("  no runs yet"))

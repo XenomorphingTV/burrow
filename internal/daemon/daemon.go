@@ -11,9 +11,9 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/runner"
-	"github.com/xenomorphingtv/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/runner"
+	"github.com/XenomorphingTV/burrow/internal/store"
 )
 
 // SocketPath returns the Unix domain socket path.

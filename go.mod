@@ -1,4 +1,4 @@
-module github.com/xenomorphingtv/burrow
+module github.com/XenomorphingTV/burrow
 
 go 1.22
 

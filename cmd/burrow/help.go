@@ -3,7 +3,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/xenomorphingtv/burrow/internal/version"
+	"github.com/XenomorphingTV/burrow/internal/version"
 )
 
 func printVersion() {

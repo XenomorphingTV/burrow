@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/XenomorphingTV/burrow/internal/store"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/xenomorphingtv/burrow/internal/store"
 )
 
 type taskStat struct {

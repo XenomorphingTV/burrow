@@ -11,9 +11,9 @@ import (
 	"sync"
 	"time"
 
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/notify"
-	"github.com/xenomorphingtv/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/notify"
+	"github.com/XenomorphingTV/burrow/internal/store"
 )
 
 // LogLine is a single line of output from a running task.
@@ -143,20 +143,15 @@ func (e *Executor) run(ctx context.Context) {
 	logFileName := fmt.Sprintf("%s-%s.log", e.name, timestamp)
 	logFilePath := filepath.Join(logDir, logFileName)
 
-	// Parse command using shell-aware splitting to handle quoted args
-	fields, err := splitCommand(e.task.Cmd)
-	if err != nil || len(fields) == 0 {
-		e.ch <- LogLine{TaskName: e.name, Text: fmt.Sprintf("[err] invalid command: %v", err), IsErr: true, Done: true, ExitCode: 1}
+	if strings.TrimSpace(e.task.Cmd) == "" {
+		e.ch <- LogLine{TaskName: e.name, Text: "[err] empty command", IsErr: true, Done: true, ExitCode: 1}
 		close(e.ch)
 		return
 	}
 
-	// Expand ~ in each field so paths like ~/Scripts/foo.py work without a shell.
-	for i, f := range fields {
-		fields[i] = expandHome(f)
-	}
-
-	cmd := exec.CommandContext(ctx, fields[0], fields[1:]...)
+	// Run through the shell so that $VAR expansion, pipes, redirects, and
+	// other shell features work as users expect from a task runner.
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", e.task.Cmd)
 
 	if e.task.Cwd != "" {
 		cmd.Dir = expandHome(e.task.Cwd)

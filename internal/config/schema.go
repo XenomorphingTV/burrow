@@ -10,6 +10,13 @@ type Settings struct {
 	Terminal    string   `toml:"terminal"`    // terminal emulator for external tasks; auto-detected if empty
 }
 
+// TaskInput defines a runtime prompt for a task parameter.
+type TaskInput struct {
+	Name    string   `toml:"name"`
+	Prompt  string   `toml:"prompt"`
+	Options []string `toml:"options"` // if non-empty, present as a selection list
+}
+
 // Task represents a named task definition.
 type Task struct {
 	Cmd         string            `toml:"cmd"`
@@ -21,6 +28,7 @@ type Task struct {
 	OnFailure   string            `toml:"on_failure"`
 	Notify      []string          `toml:"notify"`   // overrides settings.notify for this task
 	External    bool              `toml:"external"` // launch in a terminal emulator instead of capturing output
+	Inputs      []TaskInput       `toml:"inputs"`
 }
 
 // Schedule represents a cron-triggered task.

@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/daemon"
+	"github.com/XenomorphingTV/burrow/internal/runner"
+	"github.com/XenomorphingTV/burrow/internal/store"
+	"github.com/XenomorphingTV/burrow/internal/tui"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/xenomorphingtv/burrow/internal/config"
-	"github.com/xenomorphingtv/burrow/internal/daemon"
-	"github.com/xenomorphingtv/burrow/internal/runner"
-	"github.com/xenomorphingtv/burrow/internal/store"
-	"github.com/xenomorphingtv/burrow/internal/tui"
 )
 
 func runTUI() error {
