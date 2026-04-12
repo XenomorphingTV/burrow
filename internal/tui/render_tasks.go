@@ -165,9 +165,6 @@ func (m Model) renderMainPane() string {
 	contentWidth := mainWidth - 2
 
 	nameStr := StyleLogName.Render(name)
-	// Truncate cmd so it never wraps — wrapping adds lines and pushes the tab bar off screen
-	cmd := truncateStr(task.Cmd, contentWidth-lipgloss.Width(nameStr)-3)
-	cmdStr := StyleLogCmd.Render(cmd)
 
 	var scrollHint string
 	if m.scrollLock {
@@ -175,7 +172,9 @@ func (m Model) renderMainPane() string {
 	}
 
 	headLine1 := StyleLogHead.Width(mainWidth).Render(nameStr + "  " + statusBadge + scrollHint)
-	headLine2 := StyleLogHead.Width(mainWidth).Render(cmdStr)
+	// Truncate description so it never wraps — wrapping adds lines and pushes the tab bar off screen
+	desc := truncateStr(task.Description, contentWidth)
+	headLine2 := StyleLogHead.Width(mainWidth).Render(StyleLogCmd.Render(desc))
 	headLine3 := StyleLogDim.Width(mainWidth).Render(strings.Repeat("─", mainWidth))
 
 	head := lipgloss.JoinVertical(lipgloss.Left, headLine1, headLine2, headLine3)
