@@ -180,11 +180,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 			path := configFileForTask(name)
-			editor := os.Getenv("EDITOR")
-			if editor == "" {
-				editor = "vi"
-			}
-			c := exec.Command(editor, path)
+			line := taskLineInFile(path, name)
+			c := openInEditor(path, line)
 			return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
 		}
 		if m.tab == TabSchedule {
@@ -355,7 +352,7 @@ func (m Model) handleAddTask(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-// configFileForTask returns the path of the config file that defines name.
+// configFileForTask returns the absolute path of the config file that defines name.
 // It prefers the local burrow.toml; falls back to the global tasks.toml.
 func configFileForTask(name string) string {
 	if local, err := config.LoadLocal(); err == nil {
@@ -367,6 +364,46 @@ func configFileForTask(name string) string {
 		}
 	}
 	return filepath.Join(config.DefaultConfigDir(), "tasks.toml")
+}
+
+// taskLineInFile scans path for the TOML section header that defines taskName
+// and returns its 1-based line number, or 0 if not found.
+func taskLineInFile(path, taskName string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+
+	header := "[tasks." + taskName + "]"
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == header {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// openInEditor builds the exec.Cmd that opens path (at lineN, if > 0) in the
+// editor named by $EDITOR (defaulting to vi).
+func openInEditor(path string, lineN int) *exec.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	if lineN <= 0 {
+		return exec.Command(editor, path)
+	}
+
+	base := filepath.Base(editor)
+	switch base {
+	case "hx", "helix", "code":
+		//	file:N - hx (Helix), code (VS Code)
+		return exec.Command(editor, fmt.Sprintf("%s:%d", path, lineN))
+	default:
+		//	+N file - vi, vim, nvim, nano, emacs, micro, kak
+		return exec.Command(editor, fmt.Sprintf("+%d", lineN), path)
+	}
 }
 
 func (m Model) submitAddTask() (tea.Model, tea.Cmd) {
