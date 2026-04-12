@@ -8,6 +8,9 @@
 
 A personal task catalogue, runner, and scheduler with a terminal UI.
 
+![showcase](https://github.com/user-attachments/assets/34e2bb93-3a44-49dd-8908-91fd0fa49170)
+
+
 Define named scripts in a TOML file, run them with a keystroke, stream their
 output live, chain them into pipelines, schedule them with cron, and browse
 the full run history, all without leaving the terminal.
