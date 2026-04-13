@@ -1,7 +1,9 @@
 package runner
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -233,6 +235,139 @@ func TestExecutorEnvVars(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected env var in output, got: %v", lines)
+	}
+}
+
+func TestExecutorTimeout(t *testing.T) {
+	task := config.Task{Cmd: "sleep 30", Timeout: 1}
+	exec := NewExecutor("test-timeout", task, "manual", t.TempDir(), nil, nil)
+	exec.Start()
+
+	var exitCode int
+	for line := range exec.LogCh() {
+		if line.Done {
+			exitCode = line.ExitCode
+			break
+		}
+	}
+
+	if exitCode == 0 {
+		t.Error("expected non-zero exit code after timeout")
+	}
+}
+
+func TestExecutorRetriesSucceedEventually(t *testing.T) {
+	// Use a counter file so the command fails the first two attempts and
+	// succeeds on the third.
+	countFile := filepath.Join(t.TempDir(), "attempts")
+	cmd := fmt.Sprintf(
+		`c=$(cat %q 2>/dev/null || echo 0); c=$((c+1)); echo $c > %q; [ $c -ge 3 ] && echo "success" || exit 1`,
+		countFile, countFile,
+	)
+	task := config.Task{Cmd: cmd, Retries: 3}
+	exec := NewExecutor("test-retry-success", task, "manual", t.TempDir(), nil, nil)
+	exec.Start()
+
+	var lines []string
+	var exitCode int
+	for line := range exec.LogCh() {
+		if line.Done {
+			exitCode = line.ExitCode
+			break
+		}
+		lines = append(lines, line.Text)
+	}
+
+	if exitCode != 0 {
+		t.Errorf("expected exit 0 after retries, got %d; output: %v", exitCode, lines)
+	}
+	found := false
+	for _, l := range lines {
+		if strings.Contains(l, "success") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected 'success' in output, got: %v", lines)
+	}
+	// Two retry log lines should appear ([retry 1/3] and [retry 2/3]).
+	retryLines := 0
+	for _, l := range lines {
+		if strings.HasPrefix(l, "[retry ") {
+			retryLines++
+		}
+	}
+	if retryLines != 2 {
+		t.Errorf("expected 2 retry log lines, got %d; lines: %v", retryLines, lines)
+	}
+}
+
+func TestExecutorRetriesExhausted(t *testing.T) {
+	// A command that always fails; with Retries: 2 it should run 3 times total.
+	task := config.Task{Cmd: "false", Retries: 2}
+	exec := NewExecutor("test-retry-exhaust", task, "manual", t.TempDir(), nil, nil)
+	exec.Start()
+
+	var lines []string
+	var exitCode int
+	for line := range exec.LogCh() {
+		if line.Done {
+			exitCode = line.ExitCode
+			break
+		}
+		lines = append(lines, line.Text)
+	}
+
+	if exitCode == 0 {
+		t.Error("expected non-zero exit after all retries exhausted")
+	}
+	// Count "$ false" lines — one per attempt.
+	attempts := 0
+	for _, l := range lines {
+		if l == "$ false" {
+			attempts++
+		}
+	}
+	if attempts != 3 {
+		t.Errorf("expected 3 attempts (1 + 2 retries), got %d; lines: %v", attempts, lines)
+	}
+}
+
+func TestExecutorRetriesLogsAccumulate(t *testing.T) {
+	// All attempt output should end up in the single log file, not just the last attempt.
+	logDir := t.TempDir()
+	task := config.Task{Cmd: "echo attempt-output; exit 1", Retries: 1}
+	exec := NewExecutor("test-retry-log", task, "manual", logDir, nil, nil)
+	exec.Start()
+
+	for line := range exec.LogCh() {
+		if line.Done {
+			break
+		}
+	}
+
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) == 0 {
+		t.Fatal("expected a log file to be written")
+	}
+	data, err := os.ReadFile(filepath.Join(logDir, entries[0].Name()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Two attempts → "attempt-output" should appear exactly twice as its own line
+	// (the command echo line also contains the string, so we match whole lines).
+	count := 0
+	for _, line := range strings.Split(string(data), "\n") {
+		if line == "attempt-output" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 'attempt-output' twice in log file (once per attempt), got %d; log:\n%s", count, data)
 	}
 }
 
