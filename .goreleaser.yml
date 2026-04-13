@@ -30,7 +30,7 @@ checksum:
 
 release:
   github:
-    owner: xenomorphingtv
+    owner: XenomorphingTV
     name: burrow
   footer: |
-    **Full changelog**: https://github.com/xenomorphingtv/burrow/compare/{{ .PreviousTag }}...{{ .Tag }}
+    **Full changelog**: https://github.com/XenomorphingTV/burrow/compare/{{ .PreviousTag }}...{{ .Tag }}
