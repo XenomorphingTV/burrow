@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Released]
 
+## [0.1.4] - 2026-04-14
+
+### Added
+
+* Task retries — define `retries` and `retry_delay` on any task; burrow re-runs the command on failure up to the configured number of attempts, emitting `[retry N/M]` log lines between attempts; output from all attempts is accumulated into a single log file and history record
+* Filter on schedule and history tabs — `/` now filters all tabs except stats; schedule tab matches on schedule name or task name; filter resets on tab switch
+* `burrow check` — validates `burrow.toml` without starting the TUI; reports missing `cmd`, broken `depends_on` references, dependency cycles, unknown `on_failure` task names, invalid cron expressions, and negative `timeout`/`retries`/`retry_delay` values; exits non-zero on errors for use in CI
+
 ## [0.1.3] - 2026-04-13
 
 ### Added
