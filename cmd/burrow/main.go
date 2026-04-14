@@ -40,6 +40,8 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
+	case "check":
+		runCheck()
 	case "daemon":
 		if err := runDaemon(args[1:]); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
