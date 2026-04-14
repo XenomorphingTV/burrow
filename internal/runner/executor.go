@@ -60,7 +60,15 @@ func (e *Executor) LogCh() <-chan LogLine {
 
 // Start launches the task in a background goroutine.
 func (e *Executor) Start() {
-	ctx, cancel := context.WithCancel(context.Background())
+	var ctx context.Context
+	var cancel context.CancelFunc
+
+	if e.task.Timeout > 0 {
+		ctx, cancel = context.WithTimeout(context.Background(), time.Duration(e.task.Timeout)*time.Second)
+	} else {
+		ctx, cancel = context.WithCancel(context.Background())
+	}
+
 	e.cancel = cancel
 	go e.run(ctx)
 }
@@ -138,10 +146,9 @@ func (e *Executor) run(ctx context.Context) {
 		e.ch <- LogLine{TaskName: e.name, Text: fmt.Sprintf("[err] failed to create log dir: %v", err), IsErr: true}
 	}
 
-	// Build log file path
+	// Build log file path (named by the run start time, shared across all attempts).
 	timestamp := startTime.Format("20060102-150405")
-	logFileName := fmt.Sprintf("%s-%s.log", e.name, timestamp)
-	logFilePath := filepath.Join(logDir, logFileName)
+	logFilePath := filepath.Join(logDir, fmt.Sprintf("%s-%s.log", e.name, timestamp))
 
 	if strings.TrimSpace(e.task.Cmd) == "" {
 		e.ch <- LogLine{TaskName: e.name, Text: "[err] empty command", IsErr: true, Done: true, ExitCode: 1}
@@ -149,42 +156,7 @@ func (e *Executor) run(ctx context.Context) {
 		return
 	}
 
-	// Run through the shell so that $VAR expansion, pipes, redirects, and
-	// other shell features work as users expect from a task runner.
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", e.task.Cmd)
-
-	if e.task.Cwd != "" {
-		cmd.Dir = expandHome(e.task.Cwd)
-	}
-
-	env := os.Environ()
-	for k, v := range e.task.Env {
-		env = append(env, k+"="+v)
-	}
-	cmd.Env = env
-
-	e.ch <- LogLine{TaskName: e.name, Text: "$ " + e.task.Cmd}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		e.ch <- LogLine{TaskName: e.name, Text: fmt.Sprintf("[err] stdout pipe: %v", err), IsErr: true, Done: true, ExitCode: 1}
-		close(e.ch)
-		return
-	}
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		e.ch <- LogLine{TaskName: e.name, Text: fmt.Sprintf("[err] stderr pipe: %v", err), IsErr: true, Done: true, ExitCode: 1}
-		close(e.ch)
-		return
-	}
-
-	if err := cmd.Start(); err != nil {
-		e.ch <- LogLine{TaskName: e.name, Text: fmt.Sprintf("[err] start: %v", err), IsErr: true, Done: true, ExitCode: 1}
-		close(e.ch)
-		return
-	}
-
-	// Collect all log lines for file writing and history
+	// Collect all log lines across all attempts for file writing and history.
 	var (
 		logMu    sync.Mutex
 		allLines []string
@@ -197,36 +169,92 @@ func (e *Executor) run(ctx context.Context) {
 		logMu.Unlock()
 	}
 
-	var wg sync.WaitGroup
-	wg.Add(2)
+	maxAttempts := 1 + e.task.Retries
+	exitCode := 1
 
-	go func() {
-		defer wg.Done()
-		scanner := bufio.NewScanner(stdout)
-		for scanner.Scan() {
-			addLine(scanner.Text(), false)
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		// Before each retry (not the first attempt), log and optionally wait.
+		if attempt > 1 {
+			delay := time.Duration(e.task.RetryDelay) * time.Second
+			msg := fmt.Sprintf("[retry %d/%d]", attempt-1, e.task.Retries)
+			if delay > 0 {
+				msg += fmt.Sprintf(" retrying in %s...", delay)
+			}
+			addLine(msg, false)
+			if delay > 0 {
+				select {
+				case <-ctx.Done():
+					exitCode = 1
+					goto finish
+				case <-time.After(delay):
+				}
+			}
 		}
-	}()
 
-	go func() {
-		defer wg.Done()
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			addLine(scanner.Text(), true)
+		// Run through the shell so that $VAR expansion, pipes, redirects, and
+		// other shell features work as users expect from a task runner.
+		addLine("$ "+e.task.Cmd, false)
+		cmd := exec.CommandContext(ctx, "/bin/sh", "-c", e.task.Cmd)
+		if e.task.Cwd != "" {
+			cmd.Dir = expandHome(e.task.Cwd)
 		}
-	}()
+		env := os.Environ()
+		for k, v := range e.task.Env {
+			env = append(env, k+"="+v)
+		}
+		cmd.Env = env
 
-	wg.Wait()
-
-	exitCode := 0
-	if err := cmd.Wait(); err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			exitCode = exitErr.ExitCode()
-		} else {
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			addLine(fmt.Sprintf("[err] stdout pipe: %v", err), true)
 			exitCode = 1
+			continue
+		}
+		stderr, err := cmd.StderrPipe()
+		if err != nil {
+			addLine(fmt.Sprintf("[err] stderr pipe: %v", err), true)
+			exitCode = 1
+			continue
+		}
+		if err := cmd.Start(); err != nil {
+			addLine(fmt.Sprintf("[err] start: %v", err), true)
+			exitCode = 1
+			continue
+		}
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stdout)
+			for scanner.Scan() {
+				addLine(scanner.Text(), false)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			scanner := bufio.NewScanner(stderr)
+			for scanner.Scan() {
+				addLine(scanner.Text(), true)
+			}
+		}()
+		wg.Wait()
+
+		exitCode = 0
+		if err := cmd.Wait(); err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok {
+				exitCode = exitErr.ExitCode()
+			} else {
+				exitCode = 1
+			}
+		}
+
+		if exitCode == 0 {
+			break
 		}
 	}
 
+finish:
 	endTime := time.Now()
 	durationMs := endTime.Sub(startTime).Milliseconds()
 
@@ -234,8 +262,7 @@ func (e *Executor) run(ctx context.Context) {
 	lines := allLines
 	logMu.Unlock()
 
-	logContent := strings.Join(lines, "\n")
-	_ = os.WriteFile(logFilePath, []byte(logContent), 0644)
+	_ = os.WriteFile(logFilePath, []byte(strings.Join(lines, "\n")), 0644)
 
 	// Keep the last 200 lines for the history record; full output is on disk.
 	tail := lines
@@ -243,11 +270,9 @@ func (e *Executor) run(ctx context.Context) {
 		tail = tail[len(tail)-200:]
 	}
 
-	id := fmt.Sprintf("%s-%s", e.name, timestamp)
-
 	if e.store != nil {
-		record := &store.RunRecord{
-			ID:         id,
+		_ = e.store.Save(&store.RunRecord{
+			ID:         fmt.Sprintf("%s-%s", e.name, timestamp),
 			TaskName:   e.name,
 			StartTime:  startTime,
 			EndTime:    endTime,
@@ -255,8 +280,7 @@ func (e *Executor) run(ctx context.Context) {
 			ExitCode:   exitCode,
 			Trigger:    e.trigger,
 			LogTail:    tail,
-		}
-		_ = e.store.Save(record)
+		})
 	}
 
 	// Send desktop notification if subscribed.

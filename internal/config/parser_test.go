@@ -317,6 +317,9 @@ func TestLooksLikeTask(t *testing.T) {
 		{"has depends_on", map[string]interface{}{"depends_on": []interface{}{}}, true},
 		{"has cwd", map[string]interface{}{"cwd": "/tmp"}, true},
 		{"has inputs", map[string]interface{}{"inputs": []interface{}{}}, true},
+		{"has timeout", map[string]interface{}{"timeout": int64(30)}, true},
+		{"has retries", map[string]interface{}{"retries": int64(3)}, true},
+		{"has retry_delay", map[string]interface{}{"retry_delay": int64(5)}, true},
 		{"namespace group", map[string]interface{}{"seed": map[string]interface{}{"cmd": "node seed.js"}}, false},
 		{"unknown key only", map[string]interface{}{"foo": "bar"}, false},
 		{"empty", map[string]interface{}{}, false},
@@ -473,5 +476,78 @@ tags = ["personal"]
 	}
 	if task.Cmd != "echo hi" {
 		t.Errorf("cmd: got %q", task.Cmd)
+	}
+}
+
+// timeout / retries / retry_delay parsing tests
+
+func TestLoadFileTaskTimeoutRetries(t *testing.T) {
+	path := writeTempTOML(t, `
+[tasks.flaky]
+cmd         = "node flaky.js"
+timeout     = 30
+retries     = 3
+retry_delay = 5
+`)
+	cfg := newCfg()
+	if err := loadFile(cfg, path); err != nil {
+		t.Fatal(err)
+	}
+	task, ok := cfg.Tasks["flaky"]
+	if !ok {
+		t.Fatal("expected task 'flaky'")
+	}
+	if task.Timeout != 30 {
+		t.Errorf("timeout: got %d, want 30", task.Timeout)
+	}
+	if task.Retries != 3 {
+		t.Errorf("retries: got %d, want 3", task.Retries)
+	}
+	if task.RetryDelay != 5 {
+		t.Errorf("retry_delay: got %d, want 5", task.RetryDelay)
+	}
+}
+
+func TestMergeConfigsTimeoutRetriesOverride(t *testing.T) {
+	base := &Config{
+		Tasks:     map[string]Task{"t": {Timeout: 10, Retries: 1, RetryDelay: 2}},
+		Schedules: make(map[string]Schedule),
+	}
+	local := &Config{
+		Tasks:     map[string]Task{"t": {Timeout: 60, Retries: 5, RetryDelay: 10}},
+		Schedules: make(map[string]Schedule),
+	}
+	mergeConfigs(base, local)
+	task := base.Tasks["t"]
+	if task.Timeout != 60 {
+		t.Errorf("timeout: got %d, want 60", task.Timeout)
+	}
+	if task.Retries != 5 {
+		t.Errorf("retries: got %d, want 5", task.Retries)
+	}
+	if task.RetryDelay != 10 {
+		t.Errorf("retry_delay: got %d, want 10", task.RetryDelay)
+	}
+}
+
+func TestMergeConfigsTimeoutRetriesPreservedWhenLocalZero(t *testing.T) {
+	base := &Config{
+		Tasks:     map[string]Task{"t": {Timeout: 30, Retries: 3, RetryDelay: 5}},
+		Schedules: make(map[string]Schedule),
+	}
+	local := &Config{
+		Tasks:     map[string]Task{"t": {Cmd: "new-cmd"}},
+		Schedules: make(map[string]Schedule),
+	}
+	mergeConfigs(base, local)
+	task := base.Tasks["t"]
+	if task.Timeout != 30 {
+		t.Errorf("timeout should be preserved when local is zero; got %d", task.Timeout)
+	}
+	if task.Retries != 3 {
+		t.Errorf("retries should be preserved when local is zero; got %d", task.Retries)
+	}
+	if task.RetryDelay != 5 {
+		t.Errorf("retry_delay should be preserved when local is zero; got %d", task.RetryDelay)
 	}
 }

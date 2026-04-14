@@ -171,7 +171,7 @@ func loadFile(cfg *Config, path string) error {
 func looksLikeTask(m map[string]interface{}) bool {
 	for k := range m {
 		switch k {
-		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs":
+		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs", "timeout", "retries", "retry_delay":
 			return true
 		}
 	}
@@ -224,6 +224,15 @@ func taskFromMap(m map[string]interface{}) Task {
 	}
 	if v, ok := m["external"].(bool); ok {
 		t.External = v
+	}
+	if v, ok := m["timeout"].(int64); ok {
+		t.Timeout = int(v)
+	}
+	if v, ok := m["retries"].(int64); ok {
+		t.Retries = int(v)
+	}
+	if v, ok := m["retry_delay"].(int64); ok {
+		t.RetryDelay = int(v)
 	}
 	// BurntSushi/toml decodes [[array.of.tables]] as []map[string]interface{},
 	// but inline arrays decode as []interface{}. Handle both.
@@ -304,6 +313,15 @@ func mergeConfigs(base, local *Config) {
 			}
 			if len(localTask.Inputs) > 0 {
 				baseTask.Inputs = localTask.Inputs
+			}
+			if localTask.Timeout != 0 {
+				baseTask.Timeout = localTask.Timeout
+			}
+			if localTask.Retries != 0 {
+				baseTask.Retries = localTask.Retries
+			}
+			if localTask.RetryDelay != 0 {
+				baseTask.RetryDelay = localTask.RetryDelay
 			}
 			if baseTask.Env == nil {
 				baseTask.Env = make(map[string]string)

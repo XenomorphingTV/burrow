@@ -20,6 +20,9 @@ type TaskInput struct {
 // Task represents a named task definition.
 type Task struct {
 	Cmd         string            `toml:"cmd"`
+	Timeout     int               `toml:"timeout"` // kill task after N seconds; 0 = no timeout
+	Retries     int               `toml:"retries"`
+	RetryDelay  int               `toml:"retry_delay"`
 	Description string            `toml:"description"`
 	Cwd         string            `toml:"cwd"`
 	Env         map[string]string `toml:"env"`

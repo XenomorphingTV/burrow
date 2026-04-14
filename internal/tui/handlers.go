@@ -23,6 +23,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Tab):
 		m.tab = (m.tab + 1) % 4
 		m.altScroll = 0
+		m.filterInput = ""
+		m.filterMode = false
 		if m.tab == TabStats {
 			return m, loadAllHistory(m.st)
 		}
@@ -56,12 +58,11 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.updateViewportForSelected()
 			}
 		case TabSchedule:
-			schedNames := m.sortedScheduleNames()
-			if m.scheduleSelected < len(schedNames)-1 {
+			if m.scheduleSelected < len(m.filteredScheduleNames())-1 {
 				m.scheduleSelected++
 			}
 		case TabHistory:
-			if m.historySelected < len(m.history)-1 {
+			if m.historySelected < len(m.filteredHistory())-1 {
 				m.historySelected++
 				m.updateHistoryViewport()
 			}
@@ -138,7 +139,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.keys.Filter):
-		if m.tab == TabTasks {
+		if m.tab != TabStats {
 			m.filterMode = true
 			m.filterInput = ""
 		}
@@ -165,7 +166,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case TabSchedule:
-			names := m.sortedScheduleNames()
+			names := m.filteredScheduleNames()
 			if m.scheduleSelected < len(names) {
 				name := names[m.scheduleSelected]
 				if m.sched != nil {
@@ -195,7 +196,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
 		}
 		if m.tab == TabSchedule {
-			names := m.sortedScheduleNames()
+			names := m.filteredScheduleNames()
 			if m.scheduleSelected < len(names) {
 				name := names[m.scheduleSelected]
 				m.scheduleEditMode = true
