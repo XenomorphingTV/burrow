@@ -599,6 +599,39 @@ func (m Model) filteredTasks() []TaskEntry {
 	return out
 }
 
+// filteredScheduleNames returns the sorted schedule names that match the current filter.
+func (m Model) filteredScheduleNames() []string {
+	names := m.sortedScheduleNames()
+	if m.filterInput == "" {
+		return names
+	}
+	filter := strings.ToLower(m.filterInput)
+	var out []string
+	for _, name := range names {
+		sched := m.cfg.Schedules[name]
+		if strings.Contains(strings.ToLower(name), filter) ||
+			strings.Contains(strings.ToLower(sched.Task), filter) {
+			out = append(out, name)
+		}
+	}
+	return out
+}
+
+// filteredHistory returns history records whose task name matches the current filter.
+func (m Model) filteredHistory() []*store.RunRecord {
+	if m.filterInput == "" {
+		return m.history
+	}
+	filter := strings.ToLower(m.filterInput)
+	var out []*store.RunRecord
+	for _, r := range m.history {
+		if strings.Contains(strings.ToLower(r.TaskName), filter) {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
 func (m Model) sortedScheduleNames() []string {
 	var names []string
 	for n := range m.cfg.Schedules {

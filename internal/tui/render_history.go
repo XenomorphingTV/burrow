@@ -22,11 +22,22 @@ func (m Model) renderHistorySidebar(width int) string {
 	hintLine := StyleLogDim.Render("  ") +
 		StyleKey.Render("D") + StyleLogDim.Render("  clear history")
 
+	var heading string
+	if m.filterMode {
+		heading = StyleSidebarHead.Width(width).Render("/" + m.filterInput + "_")
+	} else if m.filterInput != "" {
+		heading = StyleSidebarHead.Width(width).Render("/" + m.filterInput)
+	} else {
+		heading = StyleSidebarHead.Width(width).Render("HISTORY")
+	}
+
+	history := m.filteredHistory()
+
 	var lines []string
-	lines = append(lines, StyleSidebarHead.Width(width).Render("HISTORY"))
+	lines = append(lines, heading)
 	lines = append(lines, StyleTaskRowNormal.Width(width).Render(hintLine))
 
-	if len(m.history) == 0 {
+	if len(history) == 0 {
 		lines = append(lines, StyleLogDim.Width(width).Render("  no runs yet"))
 	} else {
 		start := 0
@@ -34,8 +45,8 @@ func (m Model) renderHistorySidebar(width int) string {
 			start = m.historySelected - rowsAvail + 1
 		}
 
-		for i := start; i < len(m.history) && len(lines) < bodyHeight; i++ {
-			r := m.history[i]
+		for i := start; i < len(history) && len(lines) < bodyHeight; i++ {
+			r := history[i]
 
 			var dot, prefix string
 			if r.Trigger == "on_failure" {
@@ -78,12 +89,17 @@ func (m Model) renderHistorySidebar(width int) string {
 func (m Model) renderHistoryMainPane() string {
 	mainWidth := m.historyViewport.Width + 2
 
-	if len(m.history) == 0 {
+	history := m.filteredHistory()
+
+	if len(history) == 0 {
 		empty := StyleLogDim.Render("  No history yet. Run a task!")
 		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 4).Render(empty)
 	}
 
-	r := m.history[m.historySelected]
+	if m.historySelected >= len(history) {
+		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 4).Render("")
+	}
+	r := history[m.historySelected]
 
 	var resultBadge string
 	if r.ExitCode == 0 {

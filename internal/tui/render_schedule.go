@@ -16,13 +16,22 @@ func (m Model) renderScheduleTab() string {
 		StyleLogDim.Render("  toggle  ·  ") +
 		StyleKey.Render("e") + StyleLogDim.Render("  edit")
 
+	var heading string
+	if m.filterMode {
+		heading = StyleSectionTitle.Render("/" + m.filterInput + "_")
+	} else if m.filterInput != "" {
+		heading = StyleSectionTitle.Render("/" + m.filterInput)
+	} else {
+		heading = StyleSectionTitle.Render("Schedules")
+	}
+
 	fixedLines := []string{
-		StyleSectionTitle.Render("Schedules"),
+		heading,
 		hintLine,
 		StyleLogDim.Render("  " + strings.Repeat("─", m.width-4)),
 	}
 
-	names := m.sortedScheduleNames()
+	names := m.filteredScheduleNames()
 
 	var rows []string
 	if len(names) == 0 {
