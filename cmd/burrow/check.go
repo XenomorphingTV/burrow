@@ -3,12 +3,27 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/XenomorphingTV/burrow/internal/runner"
 	"github.com/robfig/cron/v3"
 )
+
+func expandHome(path string) string {
+	if path == "~" {
+		if home, err := os.UserHomeDir(); err == nil {
+			return home
+		}
+	} else if strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[2:])
+		}
+	}
+	return path
+}
 
 func runCheck() error {
 	cfg, err := config.Load()
@@ -82,13 +97,7 @@ func runCheck() error {
 
 		// cwd: warn if the path doesn't exist
 		if t.Cwd != "" {
-			expanded := t.Cwd
-			if len(expanded) >= 2 && expanded[:2] == "~/" {
-				if home, err := os.UserHomeDir(); err == nil {
-					expanded = home + expanded[1:]
-				}
-			}
-			if _, err := os.Stat(expanded); os.IsNotExist(err) {
+			if _, err := os.Stat(expandHome(t.Cwd)); os.IsNotExist(err) {
 				addWarn("task %q: cwd %q does not exist", name, t.Cwd)
 			}
 		}
