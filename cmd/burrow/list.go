@@ -1,21 +1,42 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"sort"
 	"strings"
 
 	"github.com/XenomorphingTV/burrow/internal/config"
 )
 
-func runList() error {
+type taskJSON struct {
+	Name        string            `json:"name"`
+	Cmd         string            `json:"cmd"`
+	Description string            `json:"description,omitempty"`
+	Cwd         string            `json:"cwd,omitempty"`
+	Tags        []string          `json:"tags,omitempty"`
+	DependsOn   []string          `json:"depends_on,omitempty"`
+	Watch       []string          `json:"watch,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
+	Timeout     int               `json:"timeout,omitempty"`
+	Retries     int               `json:"retries,omitempty"`
+	OnFailure   string            `json:"on_failure,omitempty"`
+	External    bool              `json:"external,omitempty"`
+}
+
+func runList(jsonOut bool) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
 	if len(cfg.Tasks) == 0 {
-		fmt.Println("No tasks configured.")
+		if jsonOut {
+			fmt.Println("[]")
+		} else {
+			fmt.Println("No tasks configured.")
+		}
 		return nil
 	}
 
@@ -24,6 +45,30 @@ func runList() error {
 		names = append(names, n)
 	}
 	sort.Strings(names)
+
+	if jsonOut {
+		tasks := make([]taskJSON, 0, len(names))
+		for _, n := range names {
+			t := cfg.Tasks[n]
+			tasks = append(tasks, taskJSON{
+				Name:        n,
+				Cmd:         t.Cmd,
+				Description: t.Description,
+				Cwd:         t.Cwd,
+				Tags:        t.Tags,
+				DependsOn:   t.DependsOn,
+				Watch:       t.Watch,
+				Env:         t.Env,
+				Timeout:     t.Timeout,
+				Retries:     t.Retries,
+				OnFailure:   t.OnFailure,
+				External:    t.External,
+			})
+		}
+		enc := json.NewEncoder(os.Stdout)
+		enc.SetIndent("", "  ")
+		return enc.Encode(tasks)
+	}
 
 	maxLen := 0
 	for _, n := range names {

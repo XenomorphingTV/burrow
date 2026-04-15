@@ -16,3 +16,6 @@ dist/
 # personal config
 burrow.toml
 burrow.toml.pers
+
+# personal files
+IDEAS.md
