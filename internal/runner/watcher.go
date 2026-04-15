@@ -17,6 +17,7 @@ type FileInfo struct {
 // baseDir. "**" in a pattern causes a recursive directory walk; the part after
 // "**/" is matched against each file's base name via filepath.Match.
 func SnapshotFiles(patterns []string, baseDir string) map[string]FileInfo {
+	baseDir = expandHome(baseDir)
 	snap := make(map[string]FileInfo)
 	for _, pattern := range patterns {
 		if !filepath.IsAbs(pattern) && baseDir != "" {

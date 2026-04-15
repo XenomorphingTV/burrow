@@ -31,16 +31,20 @@ func (m Model) renderScheduleTab() string {
 		StyleLogDim.Render("  " + strings.Repeat("─", m.width-4)),
 	}
 
-	names := m.filteredScheduleNames()
+	entries := m.scheduleTabEntries()
 
 	var rows []string
-	if len(names) == 0 {
-		rows = append(rows, StyleLogDim.Render("  No schedules configured."))
+	if len(entries) == 0 {
+		rows = append(rows, StyleLogDim.Render("  No schedules or watch tasks configured."))
 	} else {
-		for i, n := range names {
-			s := m.cfg.Schedules[n]
+		for i, e := range entries {
+			var enabled bool
+			if e.kind == "cron" {
+				enabled = m.sched != nil && m.sched.IsEnabled(e.name)
+			} else {
+				enabled = !m.disabledSchedules["watch:"+e.name]
+			}
 
-			enabled := m.sched != nil && m.sched.IsEnabled(n)
 			var dot string
 			if enabled {
 				dot = StyleStatusOk.Render("●")
@@ -48,18 +52,24 @@ func (m Model) renderScheduleTab() string {
 				dot = StyleLogDim.Render("●")
 			}
 
-			nameStr := lipgloss.NewStyle().Width(22).Foreground(lipgloss.Color(colorPurple)).Render(n)
-			cronStr := lipgloss.NewStyle().Width(20).Foreground(lipgloss.Color(colorBlue)).Render(s.Cron)
-			desc := describeCron(s.Cron)
-			descStr := StyleLogDim.Render(desc)
+			nameStr := lipgloss.NewStyle().Width(22).Foreground(lipgloss.Color(colorPurple)).Render(e.name)
 
-			row := "  " + dot + " " + nameStr + cronStr + descStr
+			var kindBadge, detail string
+			if e.kind == "cron" {
+				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(colorDim)).Render("[cron]")
+				cronStr := lipgloss.NewStyle().Width(20).Foreground(lipgloss.Color(colorBlue)).Render(e.cron)
+				detail = cronStr + StyleLogDim.Render(describeCron(e.cron))
+			} else {
+				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(colorYellow)).Render("[watch]")
+				detail = StyleLogDim.Render(strings.Join(e.patterns, ", "))
+			}
 
+			inner := dot + " " + nameStr + kindBadge + detail
+			var row string
 			if i == m.scheduleSelected {
-				row = StyleTaskRowSelected.Width(m.width - 2).Render(
-					dot + " " + nameStr + cronStr + descStr,
-				)
-				row = "  " + row
+				row = "  " + StyleTaskRowSelected.Width(m.width-2).Render(inner)
+			} else {
+				row = "  " + inner
 			}
 			rows = append(rows, row)
 		}

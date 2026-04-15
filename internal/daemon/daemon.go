@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"os"
@@ -54,6 +55,9 @@ type daemon struct {
 	listener  net.Listener
 	heartbeat time.Time
 	startTime time.Time
+
+	watchMu      sync.Mutex
+	watchCancels map[string]context.CancelFunc // taskName → cancel; one per active watcher
 }
 
 // Serve runs the daemon process. It blocks until SIGTERM or SIGINT is received.
@@ -88,12 +92,13 @@ func Serve() error {
 	}
 
 	d := &daemon{
-		cfg:       cfg,
-		sched:     runner.NewScheduler(),
-		pool:      runner.NewPool(maxParallel),
-		st:        st,
-		startTime: time.Now(),
-		heartbeat: time.Now(),
+		cfg:          cfg,
+		sched:        runner.NewScheduler(),
+		pool:         runner.NewPool(maxParallel),
+		st:           st,
+		startTime:    time.Now(),
+		heartbeat:    time.Now(),
+		watchCancels: make(map[string]context.CancelFunc),
 	}
 
 	d.cfgMtime = globalConfigMtime()
@@ -101,11 +106,13 @@ func Serve() error {
 	if err := d.registerSchedules(); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: scheduler: %v\n", err)
 	}
-	if disabled, err := d.st.LoadDisabledSchedules(); err == nil {
-		applyDisabledSchedules(d.sched, disabled)
-	}
+	disabled, _ := d.st.LoadDisabledSchedules()
+	applyDisabledSchedules(d.sched, disabled)
 	d.sched.Start()
 	defer d.sched.Stop()
+
+	d.startWatchers(disabled)
+	defer d.stopWatchers()
 
 	// Unix socket for IPC.
 	sockPath := SocketPath()
@@ -238,6 +245,11 @@ func (d *daemon) reload() error {
 	oldSched.Stop()
 	newSched.Start()
 
+	// Restart file watchers for the new config.
+	d.stopWatchers()
+	reloadDisabled, _ := d.st.LoadDisabledSchedules()
+	d.startWatchers(reloadDisabled)
+
 	fmt.Fprintln(os.Stderr, "daemon: config reloaded")
 	return nil
 }
@@ -250,6 +262,132 @@ func (d *daemon) heartbeatLoop() {
 		d.mu.Lock()
 		d.heartbeat = time.Now()
 		d.mu.Unlock()
+	}
+}
+
+// startWatchers launches a polling goroutine for every task that has Watch
+// patterns and is not listed as disabled in the provided map.
+// Caller must NOT hold d.watchMu.
+func (d *daemon) startWatchers(disabled map[string]bool) {
+	d.mu.RLock()
+	cfg := d.cfg
+	d.mu.RUnlock()
+
+	d.watchMu.Lock()
+	defer d.watchMu.Unlock()
+
+	for taskName, task := range cfg.Tasks {
+		if len(task.Watch) == 0 {
+			continue
+		}
+		if disabled["watch:"+taskName] {
+			continue
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		d.watchCancels[taskName] = cancel
+		go d.watchTask(ctx, taskName, task)
+	}
+}
+
+// stopWatchers cancels all active file watcher goroutines and clears the map.
+func (d *daemon) stopWatchers() {
+	d.watchMu.Lock()
+	defer d.watchMu.Unlock()
+	for name, cancel := range d.watchCancels {
+		cancel()
+		delete(d.watchCancels, name)
+	}
+}
+
+// applyDisabledWatchers starts or stops individual watchers to match disabled.
+// Called when the TUI sends an updated disabled-schedules map over IPC.
+func (d *daemon) applyDisabledWatchers(disabled map[string]bool) {
+	d.mu.RLock()
+	cfg := d.cfg
+	d.mu.RUnlock()
+
+	d.watchMu.Lock()
+	defer d.watchMu.Unlock()
+
+	for taskName, task := range cfg.Tasks {
+		if len(task.Watch) == 0 {
+			continue
+		}
+		key := "watch:" + taskName
+		if disabled[key] {
+			// Should be disabled — cancel if running.
+			if cancel, ok := d.watchCancels[taskName]; ok {
+				cancel()
+				delete(d.watchCancels, taskName)
+			}
+		} else {
+			// Should be enabled — start if not already running.
+			if _, ok := d.watchCancels[taskName]; !ok {
+				ctx, cancel := context.WithCancel(context.Background())
+				d.watchCancels[taskName] = cancel
+				go d.watchTask(ctx, taskName, task)
+			}
+		}
+	}
+}
+
+// watchTask polls file mtimes for task and calls runWatchedTask when a change
+// is detected. It blocks until ctx is cancelled.
+func (d *daemon) watchTask(ctx context.Context, taskName string, task config.Task) {
+	baseDir := task.Cwd
+	if baseDir == "" {
+		baseDir = "."
+	}
+	snap := runner.SnapshotFiles(task.Watch, baseDir)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			newSnap := runner.SnapshotFiles(task.Watch, baseDir)
+			if !runner.SnapshotsMatch(snap, newSnap) {
+				snap = newSnap
+				d.runWatchedTask(ctx, taskName)
+				if ctx.Err() != nil {
+					return
+				}
+			}
+		}
+	}
+}
+
+// runWatchedTask runs taskName synchronously (blocking until it finishes or ctx
+// is cancelled). Running synchronously prevents stacking multiple triggered
+// runs on top of each other.
+func (d *daemon) runWatchedTask(ctx context.Context, taskName string) {
+	d.mu.RLock()
+	task, ok := d.cfg.Tasks[taskName]
+	logDir := d.cfg.Settings.LogDir
+	notifyDefault := d.cfg.Settings.Notify
+	d.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	d.pool.Acquire()
+	exec := runner.NewExecutor(taskName, task, "watch", logDir, d.st, notifyDefault)
+	exec.Start()
+	for {
+		select {
+		case _, ok := <-exec.LogCh():
+			if !ok {
+				d.pool.Release()
+				return
+			}
+		case <-ctx.Done():
+			exec.Kill()
+			for range exec.LogCh() {
+			}
+			d.pool.Release()
+			return
+		}
 	}
 }
 

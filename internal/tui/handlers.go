@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,7 +59,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.updateViewportForSelected()
 			}
 		case TabSchedule:
-			if m.scheduleSelected < len(m.filteredScheduleNames())-1 {
+			if m.scheduleSelected < len(m.scheduleTabEntries())-1 {
 				m.scheduleSelected++
 			}
 		case TabHistory:
@@ -176,16 +177,57 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				}
 			}
 		case TabSchedule:
-			names := m.filteredScheduleNames()
-			if m.scheduleSelected < len(names) {
-				name := names[m.scheduleSelected]
-				if m.sched != nil {
-					if m.sched.IsEnabled(name) {
-						m.sched.Disable(name)
-						m.disabledSchedules[name] = true
+			entries := m.scheduleTabEntries()
+			if m.scheduleSelected < len(entries) {
+				e := entries[m.scheduleSelected]
+				if e.kind == "cron" {
+					if m.sched != nil {
+						if m.sched.IsEnabled(e.name) {
+							m.sched.Disable(e.name)
+							m.disabledSchedules[e.name] = true
+						} else {
+							m.sched.Enable(e.name)
+							delete(m.disabledSchedules, e.name)
+						}
+						if m.st != nil {
+							m.st.SaveDisabledSchedules(m.disabledSchedules)
+						}
+					}
+				} else {
+					// Watch entry: toggle disabled state and sync watcher.
+					key := "watch:" + e.name
+					if m.disabledSchedules[key] {
+						// Re-enable: remove from disabled, start watcher if task is done.
+						delete(m.disabledSchedules, key)
+						for i, t := range m.tasks {
+							if t.Name == e.name && (t.Status == StatusSuccess || t.Status == StatusFailed) {
+								ctx, cancel := context.WithCancel(context.Background())
+								m.watchers[e.name] = cancel
+								task := m.cfg.Tasks[e.name]
+								baseDir := task.Cwd
+								if baseDir == "" {
+									baseDir = "."
+								}
+								m.tasks[i].Status = StatusWatching
+								if m.st != nil {
+									m.st.SaveDisabledSchedules(m.disabledSchedules)
+								}
+								return m, startWatcher(ctx, e.name, task.Watch, baseDir)
+							}
+						}
 					} else {
-						m.sched.Enable(name)
-						delete(m.disabledSchedules, name)
+						// Disable: cancel active watcher if any.
+						m.disabledSchedules[key] = true
+						if cancel, ok := m.watchers[e.name]; ok {
+							cancel()
+							delete(m.watchers, e.name)
+							for i, t := range m.tasks {
+								if t.Name == e.name && t.Status == StatusWatching {
+									m.tasks[i].Status = StatusIdle
+									break
+								}
+							}
+						}
 					}
 					if m.st != nil {
 						m.st.SaveDisabledSchedules(m.disabledSchedules)
@@ -206,16 +248,22 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
 		}
 		if m.tab == TabSchedule {
-			names := m.filteredScheduleNames()
-			if m.scheduleSelected < len(names) {
-				name := names[m.scheduleSelected]
-				m.scheduleEditMode = true
-				m.scheduleEditName = name
-				if sched, ok := m.cfg.Schedules[name]; ok {
-					m.scheduleEditInput.SetValue(sched.Cron)
+			entries := m.scheduleTabEntries()
+			if m.scheduleSelected < len(entries) {
+				e := entries[m.scheduleSelected]
+				if e.kind == "cron" {
+					m.scheduleEditMode = true
+					m.scheduleEditName = e.name
+					m.scheduleEditInput.SetValue(e.cron)
+					m.scheduleEditInput.Focus()
+					m.scheduleEditErr = ""
+				} else {
+					// Watch entry: open config file in $EDITOR at the task line.
+					path := configFileForTask(e.name)
+					line := taskLineInFile(path, e.name)
+					c := openInEditor(path, line)
+					return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
 				}
-				m.scheduleEditInput.Focus()
-				m.scheduleEditErr = ""
 			}
 		}
 	}

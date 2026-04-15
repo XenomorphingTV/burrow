@@ -34,6 +34,7 @@ type StatusData struct {
 	LastHeartbeat time.Time      `json:"last_heartbeat"`
 	ConfigMtime   time.Time      `json:"config_mtime"`
 	NextRuns      []NextRunEntry `json:"next_runs"`
+	WatchTasks    []WatchEntry   `json:"watch_tasks,omitempty"`
 }
 
 // NextRunEntry describes the next scheduled run for one schedule.
@@ -42,6 +43,13 @@ type NextRunEntry struct {
 	Task     string    `json:"task"`
 	Spec     string    `json:"spec"`
 	Next     time.Time `json:"next"`
+}
+
+// WatchEntry describes one watch-mode task registered in the daemon.
+type WatchEntry struct {
+	Task     string   `json:"task"`
+	Patterns []string `json:"patterns"`
+	Active   bool     `json:"active"` // true when the watcher goroutine is running
 }
 
 // handleConn services a single IPC connection.
@@ -126,6 +134,7 @@ func handleConn(conn net.Conn, d *daemon) {
 			d.mu.Lock()
 			applyDisabledSchedules(d.sched, disabled)
 			d.mu.Unlock()
+			d.applyDisabledWatchers(disabled)
 			writeResponse(conn, Response{OK: true})
 		}
 
@@ -149,7 +158,16 @@ func buildStatusResponse(d *daemon) Response {
 	heartbeat := d.heartbeat
 	cfgMtime := d.cfgMtime
 	schedEntries := d.sched.AllSchedules()
+	cfg := d.cfg
 	d.mu.RUnlock()
+
+	// Snapshot active watcher names without holding d.mu.
+	d.watchMu.Lock()
+	activeWatchers := make(map[string]bool, len(d.watchCancels))
+	for name := range d.watchCancels {
+		activeWatchers[name] = true
+	}
+	d.watchMu.Unlock()
 
 	uptime := time.Since(startTime).Truncate(time.Second).String()
 
@@ -168,6 +186,21 @@ func buildStatusResponse(d *daemon) Response {
 		return nextRuns[i].Next.Before(nextRuns[j].Next)
 	})
 
+	var watchTasks []WatchEntry
+	for taskName, task := range cfg.Tasks {
+		if len(task.Watch) == 0 {
+			continue
+		}
+		watchTasks = append(watchTasks, WatchEntry{
+			Task:     taskName,
+			Patterns: task.Watch,
+			Active:   activeWatchers[taskName],
+		})
+	}
+	sort.Slice(watchTasks, func(i, j int) bool {
+		return watchTasks[i].Task < watchTasks[j].Task
+	})
+
 	data := StatusData{
 		PID:           os.Getpid(),
 		StartTime:     startTime,
@@ -175,6 +208,7 @@ func buildStatusResponse(d *daemon) Response {
 		LastHeartbeat: heartbeat,
 		ConfigMtime:   cfgMtime,
 		NextRuns:      nextRuns,
+		WatchTasks:    watchTasks,
 	}
 	raw, _ := json.Marshal(data)
 	return Response{OK: true, Data: raw}

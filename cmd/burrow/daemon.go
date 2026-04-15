@@ -118,7 +118,29 @@ func daemonStatus() error {
 				r.Schedule, r.Task, r.Next.Local().Format("2006-01-02 15:04:05"), in)
 		}
 	}
+
+	if len(status.WatchTasks) > 0 {
+		fmt.Println("Watch tasks:")
+		for _, w := range status.WatchTasks {
+			state := "active"
+			if !w.Active {
+				state = "disabled"
+			}
+			fmt.Printf("  %-20s  %-30s  %s\n", w.Task, joinPatterns(w.Patterns), state)
+		}
+	}
 	return nil
+}
+
+func joinPatterns(patterns []string) string {
+	result := ""
+	for i, p := range patterns {
+		if i > 0 {
+			result += ", "
+		}
+		result += p
+	}
+	return result
 }
 
 func daemonUninstall() error {

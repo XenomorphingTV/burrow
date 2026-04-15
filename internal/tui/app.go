@@ -461,8 +461,8 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 			delete(m.watchers, name)
 		}
 
-		// If the task has watch patterns, enter watch mode.
-		if len(taskCfg.Watch) > 0 {
+		// If the task has watch patterns and watching is not disabled, enter watch mode.
+		if len(taskCfg.Watch) > 0 && !m.disabledSchedules["watch:"+name] {
 			for i, t := range m.tasks {
 				if t.Name == name {
 					m.tasks[i].Status = StatusWatching
@@ -671,6 +671,58 @@ func (m Model) filteredHistory() []*store.RunRecord {
 	for _, r := range m.history {
 		if strings.Contains(strings.ToLower(r.TaskName), filter) {
 			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// schedTabEntry is one row in the schedules tab — either a cron schedule or a
+// watch task.
+type schedTabEntry struct {
+	kind     string   // "cron" or "watch"
+	name     string   // schedule name (cron) or task name (watch)
+	taskName string   // task being triggered
+	cron     string   // cron expression (kind == "cron" only)
+	patterns []string // watch patterns (kind == "watch" only)
+}
+
+// scheduleTabEntries returns the combined list of cron and watch entries for
+// the schedules tab, in filter order.
+func (m Model) scheduleTabEntries() []schedTabEntry {
+	var entries []schedTabEntry
+	for _, name := range m.filteredScheduleNames() {
+		s := m.cfg.Schedules[name]
+		entries = append(entries, schedTabEntry{
+			kind: "cron", name: name, taskName: s.Task, cron: s.Cron,
+		})
+	}
+	for _, name := range m.filteredWatchTaskNames() {
+		task := m.cfg.Tasks[name]
+		entries = append(entries, schedTabEntry{
+			kind: "watch", name: name, taskName: name, patterns: task.Watch,
+		})
+	}
+	return entries
+}
+
+// filteredWatchTaskNames returns sorted task names that have Watch patterns and
+// match the current filter.
+func (m Model) filteredWatchTaskNames() []string {
+	var names []string
+	for name, task := range m.cfg.Tasks {
+		if len(task.Watch) > 0 {
+			names = append(names, name)
+		}
+	}
+	sort.Strings(names)
+	if m.filterInput == "" {
+		return names
+	}
+	filter := strings.ToLower(m.filterInput)
+	var out []string
+	for _, name := range names {
+		if strings.Contains(strings.ToLower(name), filter) {
+			out = append(out, name)
 		}
 	}
 	return out
