@@ -32,6 +32,7 @@ type Task struct {
 	Notify      []string          `toml:"notify"`   // overrides settings.notify for this task
 	External    bool              `toml:"external"` // launch in a terminal emulator instead of capturing output
 	Inputs      []TaskInput       `toml:"inputs"`
+	Watch       []string          `toml:"watch"` // glob patterns; re-run task when matched files change
 }
 
 // Schedule represents a cron-triggered task.

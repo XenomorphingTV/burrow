@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +23,7 @@ const (
 	StatusRunning
 	StatusSuccess
 	StatusFailed
+	StatusWatching
 )
 
 // Tab represents which tab is currently active.
@@ -60,6 +62,9 @@ type statsLoadedMsg []*store.RunRecord
 
 // tickMsg is sent periodically for spinner animation.
 type tickMsg struct{}
+
+// watchTriggeredMsg is sent when a watched file changes.
+type watchTriggeredMsg struct{ taskName string }
 
 // Model is the root Bubbletea model.
 type Model struct {
@@ -114,6 +119,7 @@ type Model struct {
 	collapsedGroups map[string]bool
 	onFailureRuns   map[string]bool // tracks tasks started as on_failure to prevent recursion
 	pipelineQueues  map[string][]string
+	watchers        map[string]context.CancelFunc // cancel funcs for active file watchers
 
 	width  int
 	height int
@@ -194,6 +200,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		collapsedGroups:   make(map[string]bool),
 		onFailureRuns:     make(map[string]bool),
 		pipelineQueues:    make(map[string][]string),
+		watchers:          make(map[string]context.CancelFunc),
 		promptValues:      make(map[string]string),
 		pendingEnv:        make(map[string]map[string]string),
 		scheduleEditInput: ti,
@@ -327,6 +334,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statsRecords = []*store.RunRecord(msg)
 		return m, nil
 
+	case watchTriggeredMsg:
+		delete(m.watchers, msg.taskName)
+		// Re-run the task; clear old logs so the new run starts fresh.
+		m.taskLogs[msg.taskName] = nil
+		if m.selectedTaskName() == msg.taskName {
+			m.viewport.SetContent("")
+		}
+		return m, m.startPipeline(msg.taskName, "watch")
+
 	case tickMsg:
 		m.tickCount++
 		return m, tick()
@@ -422,8 +438,10 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 
 	if msg.Done {
 		var onFailure string
+		var taskCfg config.Task
 		for i, t := range m.tasks {
 			if t.Name == name {
+				taskCfg = t.Cfg
 				if msg.ExitCode == 0 {
 					m.tasks[i].Status = StatusSuccess
 				} else {
@@ -436,6 +454,32 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 		}
 		delete(m.executors, name)
 		m.pool.Release()
+
+		// Cancel any previous watcher for this task before potentially starting a new one.
+		if cancel, ok := m.watchers[name]; ok {
+			cancel()
+			delete(m.watchers, name)
+		}
+
+		// If the task has watch patterns, enter watch mode.
+		if len(taskCfg.Watch) > 0 {
+			for i, t := range m.tasks {
+				if t.Name == name {
+					m.tasks[i].Status = StatusWatching
+					break
+				}
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			m.watchers[name] = cancel
+			baseDir := taskCfg.Cwd
+			if baseDir == "" {
+				baseDir = "."
+			}
+			var cmds []tea.Cmd
+			cmds = append(cmds, loadHistory(m.st))
+			cmds = append(cmds, startWatcher(ctx, name, taskCfg.Watch, baseDir))
+			return m, tea.Batch(cmds...)
+		}
 
 		var cmds []tea.Cmd
 		cmds = append(cmds, loadHistory(m.st))
@@ -735,6 +779,26 @@ func (m Model) startPipeline(target, trigger string) tea.Cmd {
 // StartTaskExternal allows external code (scheduler) to start a task.
 func (m *Model) StartTaskExternal(name, trigger string) tea.Cmd {
 	return m.startTask(name, trigger)
+}
+
+// startWatcher returns a tea.Cmd that blocks until any file matching patterns
+// (rooted at baseDir) changes, then emits watchTriggeredMsg. It exits silently
+// when ctx is cancelled.
+func startWatcher(ctx context.Context, taskName string, patterns []string, baseDir string) tea.Cmd {
+	return func() tea.Msg {
+		snap := runner.SnapshotFiles(patterns, baseDir)
+		for {
+			select {
+			case <-ctx.Done():
+				return nil
+			case <-time.After(500 * time.Millisecond):
+				newSnap := runner.SnapshotFiles(patterns, baseDir)
+				if !runner.SnapshotsMatch(snap, newSnap) {
+					return watchTriggeredMsg{taskName: taskName}
+				}
+			}
+		}
+	}
 }
 
 // fireOnFailure runs the on_failure value for a failed task.

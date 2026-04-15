@@ -92,6 +92,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			if exec, ok := m.executors[name]; ok {
 				exec.Kill()
 			}
+			if cancel, ok := m.watchers[name]; ok {
+				cancel()
+				delete(m.watchers, name)
+				for i, t := range m.tasks {
+					if t.Name == name && t.Status == StatusWatching {
+						m.tasks[i].Status = StatusIdle
+						break
+					}
+				}
+			}
 		}
 
 	case key.Matches(msg, m.keys.Clear):

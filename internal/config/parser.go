@@ -171,7 +171,7 @@ func loadFile(cfg *Config, path string) error {
 func looksLikeTask(m map[string]interface{}) bool {
 	for k := range m {
 		switch k {
-		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs", "timeout", "retries", "retry_delay":
+		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs", "timeout", "retries", "retry_delay", "watch":
 			return true
 		}
 	}
@@ -233,6 +233,13 @@ func taskFromMap(m map[string]interface{}) Task {
 	}
 	if v, ok := m["retry_delay"].(int64); ok {
 		t.RetryDelay = int(v)
+	}
+	if watch, ok := m["watch"].([]interface{}); ok {
+		for _, v := range watch {
+			if s, ok := v.(string); ok {
+				t.Watch = append(t.Watch, s)
+			}
+		}
 	}
 	// BurntSushi/toml decodes [[array.of.tables]] as []map[string]interface{},
 	// but inline arrays decode as []interface{}. Handle both.
@@ -322,6 +329,9 @@ func mergeConfigs(base, local *Config) {
 			}
 			if localTask.RetryDelay != 0 {
 				baseTask.RetryDelay = localTask.RetryDelay
+			}
+			if len(localTask.Watch) > 0 {
+				baseTask.Watch = localTask.Watch
 			}
 			if baseTask.Env == nil {
 				baseTask.Env = make(map[string]string)

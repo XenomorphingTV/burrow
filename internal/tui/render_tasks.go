@@ -97,6 +97,8 @@ func (m Model) renderSidebar(width int) string {
 			suffix = StyleStatusOk.Render(fmt.Sprintf("%dms", entry.DurationMs))
 		case StatusFailed:
 			suffix = StyleStatusFailed.Render(fmt.Sprintf("x%d", entry.ExitCode))
+		case StatusWatching:
+			suffix = StyleStatusWarn.Render("[watching]")
 		}
 
 		row := prefix + dot + " " + localName
@@ -134,6 +136,8 @@ func (m Model) statusDot(s TaskStatus) string {
 		return StyleStatusOk.Render("●")
 	case StatusFailed:
 		return StyleStatusFailed.Render("●")
+	case StatusWatching:
+		return StyleStatusWarn.Render("●")
 	default:
 		return StyleStatusIdle.Render("●")
 	}
@@ -161,6 +165,8 @@ func (m Model) renderMainPane() string {
 		statusBadge = StyleStatusOk.Render("[ok]")
 	case StatusFailed:
 		statusBadge = StyleStatusFailed.Render("[failed]")
+	case StatusWatching:
+		statusBadge = StyleStatusWarn.Render("[watching]")
 	default:
 		statusBadge = StyleStatusIdle.Render("[idle]")
 	}
