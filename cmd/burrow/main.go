@@ -36,8 +36,16 @@ func main() {
 			os.Exit(1)
 		}
 	case "list":
-		jsonOut := len(args) > 1 && args[1] == "--json"
-		if err := runList(jsonOut); err != nil {
+		var jsonOut bool
+		var outFile string
+		for _, a := range args[1:] {
+			if a == "--json" {
+				jsonOut = true
+			} else {
+				outFile = a
+			}
+		}
+		if err := runList(jsonOut, outFile); err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}

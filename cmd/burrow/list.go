@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"sort"
 	"strings"
@@ -25,17 +26,27 @@ type taskJSON struct {
 	External    bool              `json:"external,omitempty"`
 }
 
-func runList(jsonOut bool) error {
+func runList(jsonOut bool, outFile string) error {
 	cfg, err := config.Load()
 	if err != nil {
 		return fmt.Errorf("load config: %w", err)
 	}
 
+	out := io.Writer(os.Stdout)
+	if outFile != "" {
+		f, err := os.Create(outFile)
+		if err != nil {
+			return fmt.Errorf("open output file: %w", err)
+		}
+		defer f.Close()
+		out = f
+	}
+
 	if len(cfg.Tasks) == 0 {
 		if jsonOut {
-			fmt.Println("[]")
+			fmt.Fprintln(out, "[]")
 		} else {
-			fmt.Println("No tasks configured.")
+			fmt.Fprintln(out, "No tasks configured.")
 		}
 		return nil
 	}
@@ -65,7 +76,7 @@ func runList(jsonOut bool) error {
 				External:    t.External,
 			})
 		}
-		enc := json.NewEncoder(os.Stdout)
+		enc := json.NewEncoder(out)
 		enc.SetIndent("", "  ")
 		return enc.Encode(tasks)
 	}
@@ -87,7 +98,7 @@ func runList(jsonOut bool) error {
 		if len(t.Tags) > 0 {
 			tags = " [" + strings.Join(t.Tags, ", ") + "]"
 		}
-		fmt.Printf("  %-*s  %s%s\n", maxLen, n, desc, tags)
+		fmt.Fprintf(out, "  %-*s  %s%s\n", maxLen, n, desc, tags)
 	}
 
 	return nil
