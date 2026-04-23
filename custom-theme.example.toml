@@ -1,0 +1,13 @@
+# burrow example custom theme — Tokyo Night
+
+bg        = "#1a1b2e"   # deep navy background
+bg_header = "#13141f"   # slightly darker for header/status bar
+border    = "#2a2c42"   # subtle border
+selected  = "#2d3561"   # selection highlight
+text      = "#a9b1d6"   # soft blue-grey text
+dim       = "#3b4261"   # dimmed/secondary text
+purple    = "#bb9af7"   # accent — tabs, keys, log names
+blue      = "#7aa2f7"   # task names, info lines
+green     = "#9ece6a"   # success
+red       = "#f7768e"   # failure / error
+yellow    = "#e0af68"   # warnings

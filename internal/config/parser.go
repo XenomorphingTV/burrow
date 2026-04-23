@@ -137,6 +137,9 @@ func loadFile(cfg *Config, path string) error {
 	if raw.Settings.Terminal != "" {
 		cfg.Settings.Terminal = raw.Settings.Terminal
 	}
+	if raw.Settings.Theme != "" {
+		cfg.Settings.Theme = raw.Settings.Theme
+	}
 
 	// Flatten tasks, supporting one level of namespace nesting.
 	// [tasks.deploy]       → Tasks["deploy"]
@@ -296,6 +299,9 @@ func mergeConfigs(base, local *Config) {
 	}
 	if local.Settings.Terminal != "" {
 		base.Settings.Terminal = local.Settings.Terminal
+	}
+	if local.Settings.Theme != "" {
+		base.Settings.Theme = local.Settings.Theme
 	}
 
 	for name, localTask := range local.Tasks {
