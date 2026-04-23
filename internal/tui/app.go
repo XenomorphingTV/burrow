@@ -133,6 +133,7 @@ type Model struct {
 
 // New creates a new TUI Model.
 func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *runner.Pool) Model {
+	initStyles(ResolveTheme(cfg.Settings.Theme))
 	var taskNames []string
 	for name := range cfg.Tasks {
 		taskNames = append(taskNames, name)
@@ -148,7 +149,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		}
 	}
 
-	bgStyle := lipgloss.NewStyle().Background(lipgloss.Color(colorBg))
+	bgStyle := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.Bg))
 
 	vp := viewport.New(80, 20)
 	vp.Style = bgStyle

@@ -52,15 +52,15 @@ func (m Model) renderScheduleTab() string {
 				dot = StyleLogDim.Render("●")
 			}
 
-			nameStr := lipgloss.NewStyle().Width(22).Foreground(lipgloss.Color(colorPurple)).Render(e.name)
+			nameStr := lipgloss.NewStyle().Width(22).Foreground(lipgloss.Color(activeTheme.Purple)).Render(e.name)
 
 			var kindBadge, detail string
 			if e.kind == "cron" {
-				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(colorDim)).Render("[cron]")
-				cronStr := lipgloss.NewStyle().Width(20).Foreground(lipgloss.Color(colorBlue)).Render(e.cron)
+				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(activeTheme.Dim)).Render("[cron]")
+				cronStr := lipgloss.NewStyle().Width(20).Foreground(lipgloss.Color(activeTheme.Blue)).Render(e.cron)
 				detail = cronStr + StyleLogDim.Render(describeCron(e.cron))
 			} else {
-				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(colorYellow)).Render("[watch]")
+				kindBadge = lipgloss.NewStyle().Width(9).Foreground(lipgloss.Color(activeTheme.Yellow)).Render("[watch]")
 				detail = StyleLogDim.Render(strings.Join(e.patterns, ", "))
 			}
 

@@ -66,7 +66,7 @@ func (m Model) renderStatsTab() string {
 	}
 
 	styleHdr := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorDim)).
+		Foreground(lipgloss.Color(activeTheme.Dim)).
 		Bold(true)
 
 	renderRow := func(name, d7, rate, dur, last string, nameStyle lipgloss.Style) string {
@@ -88,7 +88,7 @@ func (m Model) renderStatsTab() string {
 	} else {
 		stats := computeStats(m.statsRecords)
 		for _, s := range stats {
-			nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(colorBlue))
+			nameStyle := lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Blue))
 
 			d7 := fmt.Sprintf("%d", s.runs7d)
 

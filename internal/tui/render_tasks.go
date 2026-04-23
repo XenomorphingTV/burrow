@@ -57,7 +57,7 @@ func (m Model) renderSidebar(width int) string {
 
 	items := m.visibleItems()
 	styleGroup := lipgloss.NewStyle().
-		Foreground(lipgloss.Color(colorBlue)).Bold(true).Padding(0, 1)
+		Foreground(lipgloss.Color(activeTheme.Blue)).Bold(true).Padding(0, 1)
 
 	for i, item := range items {
 		isSelected := i == m.selected
@@ -205,7 +205,7 @@ func (m Model) renderAddTaskPanel() string {
 		label := fmt.Sprintf("  %-14s", labels[i]+":")
 		var labelStr string
 		if i == m.addTaskStep {
-			labelStr = lipgloss.NewStyle().Foreground(lipgloss.Color(colorPurple)).Bold(true).Render(label)
+			labelStr = lipgloss.NewStyle().Foreground(lipgloss.Color(activeTheme.Purple)).Bold(true).Render(label)
 		} else {
 			labelStr = StyleLogDim.Render(label)
 		}
@@ -267,7 +267,7 @@ func (m Model) renderPromptPanel() string {
 			}
 		} else {
 			label := lipgloss.NewStyle().
-				Foreground(lipgloss.Color(colorPurple)).Bold(true).
+				Foreground(lipgloss.Color(activeTheme.Purple)).Bold(true).
 				Render(fmt.Sprintf("  %-14s", inp.Prompt+":"))
 			lines = append(lines, label+m.promptTextInput.View())
 		}

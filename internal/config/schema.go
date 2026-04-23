@@ -8,6 +8,7 @@ type Settings struct {
 	MaxLogAge   int      `toml:"max_log_age"` // max age of records and log files in days; 0 = unlimited
 	Notify      []string `toml:"notify"`      // default notification events: "success", "failure"
 	Terminal    string   `toml:"terminal"`    // terminal emulator for external tasks; auto-detected if empty
+	Theme       string   `toml:"theme"`       // TUI color theme: catppuccin-mocha (default), nord, dracula, gruvbox
 }
 
 // TaskInput defines a runtime prompt for a task parameter.

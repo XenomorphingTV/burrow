@@ -26,7 +26,7 @@ func (m Model) renderTabBar() string {
 			parts = append(parts, StyleTabInactive.Render(t.label))
 		}
 	}
-	bar := lipgloss.NewStyle().Background(lipgloss.Color(colorBgHeader)).Width(m.width).MaxWidth(m.width).Render(
+	bar := lipgloss.NewStyle().Background(lipgloss.Color(activeTheme.BgHeader)).Width(m.width).MaxWidth(m.width).Render(
 		strings.Join(parts, ""),
 	)
 	sep := StyleLogDim.Render(strings.Repeat("─", m.width))
