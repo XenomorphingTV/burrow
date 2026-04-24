@@ -1,5 +1,3 @@
-<img width="300" height="87" alt="burrow_logo_minimal_v2" src="https://github.com/user-attachments/assets/3ff1ee36-f646-4fdd-91b6-d7fd67dde4da" /># burrow
-
 [![CI](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml/badge.svg)](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/xenomorphingtv/burrow)](https://github.com/xenomorphingtv/burrow/releases/latest)
 [![Go 1.22+](https://img.shields.io/badge/Go-1.22+-00ADD8?logo=go&logoColor=white)](https://go.dev/)
