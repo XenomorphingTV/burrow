@@ -1,4 +1,4 @@
-.TH BURROW 1 "2026-04-13" "burrow" "User Commands"
+.TH BURROW 1 "2026-04-24" "burrow 0.1.5" "User Commands"
 .SH NAME
 burrow \- personal task catalogue, runner, and scheduler
 .SH SYNOPSIS
@@ -32,8 +32,14 @@ If the task has
 entries the full pipeline is resolved and executed in order before the
 requested task.
 .TP
-.B burrow list
+.BI "burrow list [--json] [" file ]
 Print all configured tasks as plain text, suitable for scripting.
+Pass
+.B --json
+to emit a JSON array instead.
+An optional
+.I file
+argument writes the output to that path rather than stdout.
 .TP
 .B burrow init
 Scaffold
@@ -84,6 +90,7 @@ max_parallel = 4              # max concurrent tasks
 log_dir      = "~/.config/burrow/logs"
 max_log_run  = 500            # prune history after N runs per task
 max_log_age  = 90             # prune history older than N days
+theme        = "catppuccin-mocha"   # built-in theme or path to a .toml file
 .fi
 .SS Tasks
 .nf
@@ -95,6 +102,7 @@ env         = { NODE_ENV = "development" }
 tags        = ["db", "setup"]
 depends_on  = ["other-task"]   # run other-task first (pipeline)
 on_failure  = "notify-slack"   # task name or shell command on failure
+watch       = ["src/**/*.go"]  # re-run when matched files change
 
 [[tasks.db-seed.inputs]]
 name    = "target"
@@ -208,6 +216,53 @@ Check daemon status:
 burrow daemon status
 .EE
 .RE
+.SH THEMES
+Set
+.B settings.theme
+to one of the built-in names or to a path ending in
+.BR .toml :
+.TP
+.B catppuccin-mocha
+Default dark theme (Catppuccin Mocha palette).
+.TP
+.B nord
+Nord palette.
+.TP
+.B dracula
+Dracula palette.
+.TP
+.B gruvbox
+Gruvbox dark palette.
+.PP
+Custom theme files are TOML files with any subset of the following keys:
+.B bg\c
+,
+.B bg_header\c
+,
+.B border\c
+,
+.B selected\c
+,
+.B text\c
+,
+.B dim\c
+,
+.B purple\c
+,
+.B blue\c
+,
+.B green\c
+,
+.B red\c
+,
+.B yellow\c
+.
+Any key omitted falls back to the Catppuccin Mocha default.
+.PP
+Example:
+.nf
+theme = "~/.config/burrow/mytheme.toml"
+.fi
 .SH SEE ALSO
 .BR cron (8),
 .BR systemctl (1),

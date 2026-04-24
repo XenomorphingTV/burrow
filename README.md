@@ -63,14 +63,17 @@ See `burrow.example.toml` in this repo for a full tour of the config format.
 ## CLI
 
 ```bash
-burrow                  # launch the TUI
-burrow run <task>       # run a task headlessly, stream output to stdout
-burrow list             # print the task catalogue as plain text
-burrow init             # scaffold the global config
-burrow daemon start     # start the background scheduler daemon
-burrow daemon status    # show daemon uptime and upcoming scheduled runs
-burrow help             # full usage reference
-burrow version          # print version
+burrow                        # launch the TUI
+burrow run <task>             # run a task headlessly, stream output to stdout
+burrow list                   # print the task catalogue as plain text
+burrow list --json            # print the task catalogue as JSON
+burrow list --json out.json   # write JSON catalogue to a file
+burrow init                   # scaffold the global config
+burrow check                  # validate config without starting the TUI
+burrow daemon start           # start the background scheduler daemon
+burrow daemon status          # show daemon uptime, upcoming scheduled runs, and watch tasks
+burrow help                   # full usage reference
+burrow version                # print version
 ```
 
 ## Config
@@ -84,6 +87,7 @@ Burrow merges two files on startup:
 [settings]
 max_parallel = 4
 log_dir      = "~/.config/burrow/logs"
+theme        = "catppuccin-mocha"   # catppuccin-mocha (default), nord, dracula, gruvbox, or a path to a .toml file
 
 [tasks.db-seed]
 cmd         = "node scripts/seed.js"
@@ -93,6 +97,7 @@ env         = { NODE_ENV = "development" }
 tags        = ["db"]
 depends_on  = ["db-migrate"]   # pipeline
 on_failure  = "notify-ops"     # runs if this task fails
+watch       = ["src/**/*.js"]  # re-run automatically when matched files change
 
 [schedules.nightly]
 task = "db-seed"

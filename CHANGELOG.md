@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Released]
 
+## [0.1.5] - 2026-04-24
+
+### Added
+
+* TUI themes — set `settings.theme` to a built-in name (`catppuccin-mocha`, `nord`, `dracula`, `gruvbox`) or a path to a custom TOML theme file; partial theme files are valid and fall back to Catppuccin Mocha for any unset fields
+* File watch mode — define `watch` on any task as a list of glob patterns (supports `**` for recursive matching); the TUI and daemon re-run the task automatically whenever a matched file changes
+* `burrow list --json` — print the task catalogue as a JSON array; pass an optional file path (`burrow list --json out.json`) to write directly to a file instead of stdout
+* Daemon watch status — `burrow daemon status` now lists active watch tasks alongside scheduled runs
+
 ## [0.1.4] - 2026-04-14
 
 ### Added
