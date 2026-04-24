@@ -1,4 +1,4 @@
-# burrow
+<img width="300" height="87" alt="burrow_logo_minimal_v2" src="https://github.com/user-attachments/assets/3ff1ee36-f646-4fdd-91b6-d7fd67dde4da" /># burrow
 
 [![CI](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml/badge.svg)](https://github.com/xenomorphingtv/burrow/actions/workflows/ci.yml)
 [![Latest Release](https://img.shields.io/github/v/release/xenomorphingtv/burrow)](https://github.com/xenomorphingtv/burrow/releases/latest)
@@ -6,7 +6,7 @@
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux-lightgrey?logo=linux&logoColor=white)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-<img width="900" height="300" alt="burrow_logo_minimal" src="https://github.com/user-attachments/assets/9e010b54-1eff-46eb-b9c5-b4652641ea5d" />
+<img width="900" height="261" alt="burrow_logo_minimal_v2" src="https://github.com/user-attachments/assets/426955fb-303c-441c-88cf-7fedd89c11ba" />
 
 A personal task catalogue, runner, and scheduler with a terminal UI.
 
