@@ -6,6 +6,8 @@
 [![Platform: Linux](https://img.shields.io/badge/Platform-Linux-lightgrey?logo=linux&logoColor=white)]()
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
+<img width="900" height="300" alt="burrow_logo_minimal" src="https://github.com/user-attachments/assets/9e010b54-1eff-46eb-b9c5-b4652641ea5d" />
+
 A personal task catalogue, runner, and scheduler with a terminal UI.
 
 ![showcase](https://github.com/user-attachments/assets/34e2bb93-3a44-49dd-8908-91fd0fa49170)
