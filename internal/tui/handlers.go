@@ -22,7 +22,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case key.Matches(msg, m.keys.Tab):
-		m.tab = (m.tab + 1) % 4
+		m.tab = (m.tab + 1) % 5
 		m.altScroll = 0
 		m.filterInput = ""
 		m.filterMode = false
@@ -49,6 +49,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.historySelected--
 				m.updateHistoryViewport()
 			}
+		case TabServices:
+			if m.servicesSelected > 0 {
+				m.servicesSelected--
+			}
 		}
 
 	case key.Matches(msg, m.keys.Down):
@@ -67,6 +71,8 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.historySelected++
 				m.updateHistoryViewport()
 			}
+		case TabServices:
+			m.servicesSelected++
 		}
 
 	case key.Matches(msg, m.keys.Run):

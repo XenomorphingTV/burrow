@@ -34,6 +34,7 @@ const (
 	TabSchedule
 	TabHistory
 	TabStats
+	TabServices
 )
 
 // TaskEntry holds the display state for a single task.
@@ -128,6 +129,9 @@ type Model struct {
 	history      []*store.RunRecord
 	statsRecords []*store.RunRecord
 	keys         KeyMap
+
+	servicesSelected int
+	servicesScroll   int
 
 	tickCount int
 }
@@ -373,6 +377,8 @@ func (m Model) View() string {
 		body = m.renderHistoryTab()
 	case TabStats:
 		body = m.renderStatsTab()
+	case TabServices:
+		body = m.renderServicesTab()
 	}
 
 	statusBar := m.renderStatusBar()

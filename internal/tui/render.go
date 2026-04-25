@@ -16,6 +16,7 @@ func (m Model) renderTabBar() string {
 		{"schedule", TabSchedule},
 		{"history", TabHistory},
 		{"stats", TabStats},
+		{"services", TabServices},
 	}
 
 	var parts []string
@@ -57,6 +58,13 @@ func (m Model) renderStatusBar() string {
 			StyleKey.Render("↑/↓") + " navigate",
 			StyleKey.Render("enter") + " toggle",
 			StyleKey.Render("e") + " edit cron",
+			StyleKey.Render("tab") + " switch",
+			StyleKey.Render("?") + " help",
+			StyleKey.Render("q") + " quit",
+		}
+	case TabServices:
+		keyHints = []string{
+			StyleKey.Render("↑/↓") + " navigate",
 			StyleKey.Render("tab") + " switch",
 			StyleKey.Render("?") + " help",
 			StyleKey.Render("q") + " quit",
