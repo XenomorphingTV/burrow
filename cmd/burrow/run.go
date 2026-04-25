@@ -88,6 +88,9 @@ func runHeadless(taskName string) error {
 					}
 					os.Exit(exitCode)
 				}
+				if t.OnSuccess != "" {
+					runOnSuccess(t.OnSuccess, name, cfg, st)
+				}
 				break
 			}
 			if line.IsErr {
@@ -136,6 +139,41 @@ func collectInputsHeadless(inputs []config.TaskInput) (map[string]string, error)
 		}
 	}
 	return values, nil
+}
+
+// runOnSuccess executes the on_success value for a succeeded task.
+// If value is a known task name, that task is run headlessly.
+// Otherwise it is treated as a shell command.
+func runOnSuccess(onSuccess, parentName string, cfg *config.Config, st store.Storer) {
+	fmt.Fprintf(os.Stderr, "==> Running on_success: %s\n", onSuccess)
+	if task, ok := cfg.Tasks[onSuccess]; ok {
+		exec := runner.NewExecutor(onSuccess, task, "on_success", cfg.Settings.LogDir, st, cfg.Settings.Notify)
+		exec.Start()
+		for line := range exec.LogCh() {
+			if line.Done {
+				break
+			}
+			if line.IsErr {
+				fmt.Fprintln(os.Stderr, line.Text)
+			} else {
+				fmt.Println(line.Text)
+			}
+		}
+	} else {
+		task := config.Task{Cmd: onSuccess}
+		exec := runner.NewExecutor(parentName+".on_success", task, "on_success", cfg.Settings.LogDir, st, nil)
+		exec.Start()
+		for line := range exec.LogCh() {
+			if line.Done {
+				break
+			}
+			if line.IsErr {
+				fmt.Fprintln(os.Stderr, line.Text)
+			} else {
+				fmt.Println(line.Text)
+			}
+		}
+	}
 }
 
 // runOnFailure executes the on_failure value for a failed task.

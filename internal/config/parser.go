@@ -174,7 +174,7 @@ func loadFile(cfg *Config, path string) error {
 func looksLikeTask(m map[string]interface{}) bool {
 	for k := range m {
 		switch k {
-		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "notify", "external", "inputs", "timeout", "retries", "retry_delay", "watch":
+		case "cmd", "description", "cwd", "env", "tags", "depends_on", "on_failure", "on_success", "notify", "external", "inputs", "timeout", "retries", "retry_delay", "watch":
 			return true
 		}
 	}
@@ -217,6 +217,9 @@ func taskFromMap(m map[string]interface{}) Task {
 	}
 	if v, ok := m["on_failure"].(string); ok {
 		t.OnFailure = v
+	}
+	if v, ok := m["on_success"].(string); ok {
+		t.OnSuccess = v
 	}
 	if notify, ok := m["notify"].([]interface{}); ok {
 		for _, v := range notify {
@@ -320,6 +323,9 @@ func mergeConfigs(base, local *Config) {
 			}
 			if localTask.OnFailure != "" {
 				baseTask.OnFailure = localTask.OnFailure
+			}
+			if localTask.OnSuccess != "" {
+				baseTask.OnSuccess = localTask.OnSuccess
 			}
 			if len(localTask.Notify) > 0 {
 				baseTask.Notify = localTask.Notify

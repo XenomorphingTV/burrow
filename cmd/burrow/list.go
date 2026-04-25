@@ -23,6 +23,7 @@ type taskJSON struct {
 	Timeout     int               `json:"timeout,omitempty"`
 	Retries     int               `json:"retries,omitempty"`
 	OnFailure   string            `json:"on_failure,omitempty"`
+	OnSuccess   string            `json:"on_success,omitempty"`
 	External    bool              `json:"external,omitempty"`
 }
 
@@ -73,6 +74,7 @@ func runList(jsonOut bool, outFile string) error {
 				Timeout:     t.Timeout,
 				Retries:     t.Retries,
 				OnFailure:   t.OnFailure,
+				OnSuccess:   t.OnSuccess,
 				External:    t.External,
 			})
 		}

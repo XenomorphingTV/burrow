@@ -95,6 +95,22 @@ func runCheck() error {
 			}
 		}
 
+		// on_success: warn if it looks like a task name but doesn't exist
+		if t.OnSuccess != "" {
+			looksLikeName := true
+			for _, c := range t.OnSuccess {
+				if c == ' ' || c == '|' || c == '&' || c == ';' || c == '$' {
+					looksLikeName = false
+					break
+				}
+			}
+			if looksLikeName {
+				if _, ok := cfg.Tasks[t.OnSuccess]; !ok {
+					addWarn("task %q: on_success %q is not a known task (treated as shell command)", name, t.OnSuccess)
+				}
+			}
+		}
+
 		// cwd: warn if the path doesn't exist
 		if t.Cwd != "" {
 			if _, err := os.Stat(expandHome(t.Cwd)); os.IsNotExist(err) {

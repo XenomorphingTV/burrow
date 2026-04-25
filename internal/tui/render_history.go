@@ -52,6 +52,9 @@ func (m Model) renderHistorySidebar(width int) string {
 			if r.Trigger == "on_failure" {
 				dot = StyleStatusWarn.Render("●")
 				prefix = StyleStatusWarn.Render("↳")
+			} else if r.Trigger == "on_success" {
+				dot = StyleStatusOk.Render("●")
+				prefix = StyleStatusOk.Render("↳")
 			} else {
 				prefix = " "
 				if r.ExitCode == 0 {
@@ -111,6 +114,8 @@ func (m Model) renderHistoryMainPane() string {
 	var triggerStr string
 	if r.Trigger == "on_failure" {
 		triggerStr = StyleStatusWarn.Render("↳ triggered by failure")
+	} else if r.Trigger == "on_success" {
+		triggerStr = StyleStatusOk.Render("↳ triggered by success")
 	} else {
 		triggerStr = StyleLogDim.Render(r.Trigger)
 	}

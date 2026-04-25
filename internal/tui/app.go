@@ -118,6 +118,7 @@ type Model struct {
 
 	collapsedGroups map[string]bool
 	onFailureRuns   map[string]bool // tracks tasks started as on_failure to prevent recursion
+	onSuccessRuns   map[string]bool // tracks tasks started as on_success to prevent recursion
 	pipelineQueues  map[string][]string
 	watchers        map[string]context.CancelFunc // cancel funcs for active file watchers
 
@@ -200,6 +201,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		disabledSchedules: disabledSchedules,
 		collapsedGroups:   make(map[string]bool),
 		onFailureRuns:     make(map[string]bool),
+		onSuccessRuns:     make(map[string]bool),
 		pipelineQueues:    make(map[string][]string),
 		watchers:          make(map[string]context.CancelFunc),
 		promptValues:      make(map[string]string),
@@ -438,13 +440,14 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 	name := msg.TaskName
 
 	if msg.Done {
-		var onFailure string
+		var onFailure, onSuccess string
 		var taskCfg config.Task
 		for i, t := range m.tasks {
 			if t.Name == name {
 				taskCfg = t.Cfg
 				if msg.ExitCode == 0 {
 					m.tasks[i].Status = StatusSuccess
+					onSuccess = t.Cfg.OnSuccess
 				} else {
 					m.tasks[i].Status = StatusFailed
 					onFailure = t.Cfg.OnFailure
@@ -506,6 +509,12 @@ func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.fireOnFailure(name, onFailure))
 		}
 		delete(m.onFailureRuns, name)
+
+		if onSuccess != "" && !m.onSuccessRuns[name] {
+			cmds = append(cmds, m.fireOnSuccess(name, onSuccess))
+		}
+		delete(m.onSuccessRuns, name)
+
 		return m, tea.Batch(cmds...)
 	}
 
@@ -868,6 +877,27 @@ func (m Model) fireOnFailure(parentName, onFailure string) tea.Cmd {
 	return func() tea.Msg {
 		task := config.Task{Cmd: onFailure}
 		exec := runner.NewExecutor(parentName+".on_failure", task, "on_failure", m.cfg.Settings.LogDir, m.st, nil)
+		exec.Start()
+		for range exec.LogCh() {
+		}
+		return nil
+	}
+}
+
+// fireOnSuccess runs the on_success value for a succeeded task.
+// If the value matches a known task name, that task is started via the normal
+// executor path (with recursion guard). Otherwise the value is treated as a
+// shell command and run in a fire-and-forget goroutine.
+func (m Model) fireOnSuccess(parentName, onSuccess string) tea.Cmd {
+	if _, ok := m.cfg.Tasks[onSuccess]; ok {
+		// Mark the target as an on_success run so it won't recurse.
+		m.onSuccessRuns[onSuccess] = true
+		return m.startTask(onSuccess, "on_success")
+	}
+	// Inline shell command — run headlessly and record to history.
+	return func() tea.Msg {
+		task := config.Task{Cmd: onSuccess}
+		exec := runner.NewExecutor(parentName+".on_success", task, "on_success", m.cfg.Settings.LogDir, m.st, nil)
 		exec.Start()
 		for range exec.LogCh() {
 		}

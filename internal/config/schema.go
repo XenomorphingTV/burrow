@@ -30,6 +30,7 @@ type Task struct {
 	Tags        []string          `toml:"tags"`
 	DependsOn   []string          `toml:"depends_on"`
 	OnFailure   string            `toml:"on_failure"`
+	OnSuccess   string            `toml:"on_success"`
 	Notify      []string          `toml:"notify"`   // overrides settings.notify for this task
 	External    bool              `toml:"external"` // launch in a terminal emulator instead of capturing output
 	Inputs      []TaskInput       `toml:"inputs"`
