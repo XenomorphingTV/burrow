@@ -18,6 +18,19 @@ import (
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch {
+	case msg.String() == "esc" && m.servicesLogMode:
+		m.servicesLogMode = false
+		return m, nil
+
+	case m.tab == TabServices && !m.servicesLogMode && msg.String() == "E":
+		if svc, ok := m.selectedService(); ok {
+			path := findUnitFilePath(svc)
+			if path != "" {
+				c := openInEditor(path, 0)
+				return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
+			}
+		}
+
 	case key.Matches(msg, m.keys.Quit):
 		return m, tea.Quit
 
@@ -26,8 +39,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.altScroll = 0
 		m.filterInput = ""
 		m.filterMode = false
+		m.servicesLogMode = false
+		m.servicesStatusMsg = ""
 		if m.tab == TabStats {
 			return m, loadAllHistory(m.st)
+		}
+		if m.tab == TabServices {
+			return m, loadServicesCmd()
 		}
 
 	case key.Matches(msg, m.keys.Help):
@@ -50,8 +68,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.updateHistoryViewport()
 			}
 		case TabServices:
-			if m.servicesSelected > 0 {
+			if m.servicesLogMode {
+				m.servicesViewport.LineUp(1)
+			} else if m.servicesSelected > 0 {
 				m.servicesSelected--
+				if m.servicesSelected < m.servicesScroll {
+					m.servicesScroll = m.servicesSelected
+				}
 			}
 		}
 
@@ -72,10 +95,24 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.updateHistoryViewport()
 			}
 		case TabServices:
-			m.servicesSelected++
+			if m.servicesLogMode {
+				m.servicesViewport.LineDown(1)
+			} else if m.servicesSelected < len(m.filteredServices())-1 {
+				m.servicesSelected++
+				rowsAvail := m.height - 3 - 2
+				if rowsAvail < 1 {
+					rowsAvail = 1
+				}
+				if m.servicesSelected >= m.servicesScroll+rowsAvail {
+					m.servicesScroll = m.servicesSelected - rowsAvail + 1
+				}
+			}
 		}
 
 	case key.Matches(msg, m.keys.Run):
+		if m.tab == TabServices {
+			return m, loadServicesCmd()
+		}
 		if m.tab == TabTasks {
 			name := m.selectedTaskName()
 			if name == "" {
@@ -118,6 +155,13 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.scrollLock = false
 			m.viewport.SetContent("")
 		}
+		if m.tab == TabServices && !m.servicesLogMode {
+			if svc, ok := m.selectedService(); ok {
+				m.servicesLogMode = true
+				m.servicesViewport.SetContent("loading...")
+				return m, serviceLogsCmd(svc)
+			}
+		}
 
 	case key.Matches(msg, m.keys.ScrollUp):
 		switch m.tab {
@@ -132,6 +176,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 		case TabHistory:
 			m.historyViewport.HalfViewUp()
+		case TabServices:
+			if m.servicesLogMode {
+				m.servicesViewport.HalfViewUp()
+			} else {
+				step := max(1, m.height/4)
+				m.servicesScroll -= step
+				if m.servicesScroll < 0 {
+					m.servicesScroll = 0
+				}
+			}
 		}
 
 	case key.Matches(msg, m.keys.ScrollDown):
@@ -145,6 +199,12 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.altScroll += max(1, m.height/4)
 		case TabHistory:
 			m.historyViewport.HalfViewDown()
+		case TabServices:
+			if m.servicesLogMode {
+				m.servicesViewport.HalfViewDown()
+			} else {
+				m.servicesScroll += max(1, m.height/4)
+			}
 		}
 
 	case key.Matches(msg, m.keys.AddTask):
@@ -168,6 +228,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	case key.Matches(msg, m.keys.ToggleSchedule):
 		switch m.tab {
+		case TabServices:
+			if !m.servicesLogMode {
+				if svc, ok := m.selectedService(); ok {
+					action := "start"
+					if strings.HasPrefix(svc.status, "active") {
+						action = "stop"
+					}
+					return m, serviceActionCmd(svc, action)
+				}
+			}
 		case TabTasks:
 			items := m.visibleItems()
 			if m.selected < len(items) && items[m.selected].isGroup {
@@ -243,6 +313,16 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 
 	case key.Matches(msg, m.keys.EditSchedule):
+		if m.tab == TabServices && !m.servicesLogMode {
+			if svc, ok := m.selectedService(); ok {
+				action := "enable"
+				if svc.enabled == "enabled" {
+					action = "disable"
+				}
+				return m, serviceActionCmd(svc, action)
+			}
+			return m, nil
+		}
 		if m.tab == TabTasks {
 			name := m.selectedTaskName()
 			if name == "" {

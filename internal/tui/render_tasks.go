@@ -120,7 +120,7 @@ func (m Model) renderSidebar(width int) string {
 	} else if m.promptMode {
 		extraPanelHeight = m.promptPanelHeight()
 	}
-	sidebarHeight := m.height - 4 - extraPanelHeight
+	sidebarHeight := m.height - 3 - extraPanelHeight
 	for len(lines) < sidebarHeight {
 		lines = append(lines, StyleTaskRowNormal.Width(width).Render(""))
 	}

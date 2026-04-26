@@ -63,11 +63,26 @@ func (m Model) renderStatusBar() string {
 			StyleKey.Render("q") + " quit",
 		}
 	case TabServices:
-		keyHints = []string{
-			StyleKey.Render("↑/↓") + " navigate",
-			StyleKey.Render("tab") + " switch",
-			StyleKey.Render("?") + " help",
-			StyleKey.Render("q") + " quit",
+		if m.servicesLogMode {
+			keyHints = []string{
+				StyleKey.Render("↑/↓") + " scroll",
+				StyleKey.Render("pgup/pgdn") + " page",
+				StyleKey.Render("esc") + " back",
+				StyleKey.Render("tab") + " switch",
+				StyleKey.Render("q") + " quit",
+			}
+		} else {
+			keyHints = []string{
+				StyleKey.Render("↑/↓") + " navigate",
+				StyleKey.Render("enter") + " start/stop",
+				StyleKey.Render("e") + " enable/disable",
+				StyleKey.Render("l") + " logs",
+				StyleKey.Render("E") + " edit unit",
+				StyleKey.Render("r") + " refresh",
+				StyleKey.Render("tab") + " switch",
+				StyleKey.Render("?") + " help",
+				StyleKey.Render("q") + " quit",
+			}
 		}
 	default:
 		keyHints = []string{
@@ -112,18 +127,23 @@ func (m Model) renderHelpOverlay(base string) string {
   ↓ / j           navigate down
   pgup / ctrl+u   scroll up
   pgdn / ctrl+d   scroll down
-  r               run selected task
+  r               run selected task      (tasks tab)
+  r               refresh services       (services tab)
   x               kill selected task
-  l               clear log view
-  e               open task in $EDITOR  (tasks tab)
-  e               edit cron expression  (schedule tab)
+  l               clear log view         (tasks tab)
+  l               view service logs      (services tab)
+  e               open task in $EDITOR   (tasks tab)
+  e               edit cron expression   (schedule tab)
+  e               enable/disable service (services tab)
+  E               edit unit file         (services tab)
+  enter / space   start/stop service     (services tab)
   a               add new task
-  enter / space   collapse/expand group (tasks tab)
+  enter / space   collapse/expand group  (tasks tab)
   enter / space   toggle schedule on/off (schedule tab)
   D               clear all run history  (history tab)
   tab             switch tab
   /               filter by name/tag
-  esc             exit filter / add / prompt mode
+  esc             exit log view / filter / add / prompt mode
   ?               toggle this help
   q / ctrl+c      quit`
 

@@ -51,7 +51,7 @@ func computeStats(records []*store.RunRecord) []*taskStat {
 }
 
 func (m Model) renderStatsTab() string {
-	bodyHeight := m.height - 4
+	bodyHeight := m.height - 3
 
 	// Column widths (fixed)
 	const col7d = 5

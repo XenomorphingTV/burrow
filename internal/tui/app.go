@@ -130,8 +130,12 @@ type Model struct {
 	statsRecords []*store.RunRecord
 	keys         KeyMap
 
-	servicesSelected int
-	servicesScroll   int
+	servicesSelected  int
+	servicesScroll    int
+	services          []serviceEntry
+	servicesLogMode   bool
+	servicesStatusMsg string
+	servicesViewport  viewport.Model
 
 	tickCount int
 }
@@ -161,6 +165,9 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 
 	hvp := viewport.New(80, 20)
 	hvp.Style = bgStyle
+
+	svp := viewport.New(80, 20)
+	svp.Style = bgStyle
 
 	ti := textinput.New()
 	ti.Placeholder = "cron expression, e.g. 0 2 * * *"
@@ -202,6 +209,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		viewport:          vp,
 		historyViewport:   hvp,
 		keys:              DefaultKeyMap(),
+		servicesViewport:  svp,
 		disabledSchedules: disabledSchedules,
 		collapsedGroups:   make(map[string]bool),
 		onFailureRuns:     make(map[string]bool),
@@ -265,6 +273,7 @@ func tick() tea.Cmd {
 func (m Model) Init() tea.Cmd {
 	return tea.Batch(
 		loadHistory(m.st),
+		loadServicesCmd(),
 		tick(),
 	)
 }
@@ -341,6 +350,29 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.statsRecords = []*store.RunRecord(msg)
 		return m, nil
 
+	case servicesLoadedMsg:
+		m.services = []serviceEntry(msg)
+		if m.servicesSelected >= len(m.services) {
+			m.servicesSelected = 0
+		}
+		return m, nil
+
+	case serviceActionDoneMsg:
+		if msg.err != nil {
+			m.servicesStatusMsg = "error: " + msg.err.Error()
+			if msg.output != "" {
+				m.servicesStatusMsg += " — " + msg.output
+			}
+		} else {
+			m.servicesStatusMsg = ""
+		}
+		return m, loadServicesCmd()
+
+	case serviceLogsMsg:
+		m.servicesViewport.SetContent(strings.Join(msg.lines, "\n"))
+		m.servicesViewport.GotoBottom()
+		return m, nil
+
 	case watchTriggeredMsg:
 		delete(m.watchers, msg.taskName)
 		// Re-run the task; clear old logs so the new run starts fresh.
@@ -364,7 +396,6 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	title := StyleHeader.Width(m.width).Render("  burrow")
 	tabBar := m.renderTabBar()
 
 	var body string
@@ -384,7 +415,6 @@ func (m Model) View() string {
 	statusBar := m.renderStatusBar()
 
 	view := lipgloss.JoinVertical(lipgloss.Left,
-		title,
 		tabBar,
 		body,
 		statusBar,
@@ -431,8 +461,8 @@ func (m *Model) recalcViewport() {
 	} else if m.promptMode {
 		extraPanelHeight = m.promptPanelHeight()
 	}
-	// height - title(1) - tabbar(2) - loghead(3) - statusbar(1) - extraPanel = height - 7 - extraPanel
-	vpHeight := m.height - 7 - extraPanelHeight
+	// height - tabbar(2) - loghead(3) - statusbar(1) - extraPanel = height - 6 - extraPanel
+	vpHeight := m.height - 6 - extraPanelHeight
 	if vpHeight < 3 {
 		vpHeight = 3
 	}
@@ -440,6 +470,14 @@ func (m *Model) recalcViewport() {
 	m.viewport.Height = vpHeight
 	m.historyViewport.Width = mainWidth
 	m.historyViewport.Height = vpHeight
+
+	// services log view uses full width, body height minus log header(1) + sep(1)
+	svpH := m.height - 3 - 2
+	if svpH < 3 {
+		svpH = 3
+	}
+	m.servicesViewport.Width = m.width
+	m.servicesViewport.Height = svpH
 }
 
 func (m Model) handleLogLine(msg logLineMsg) (tea.Model, tea.Cmd) {

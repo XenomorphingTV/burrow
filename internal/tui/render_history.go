@@ -16,7 +16,7 @@ func (m Model) renderHistoryTab() string {
 }
 
 func (m Model) renderHistorySidebar(width int) string {
-	bodyHeight := m.height - 4
+	bodyHeight := m.height - 3
 	rowsAvail := bodyHeight - 2 // header + hint line
 
 	hintLine := StyleLogDim.Render("  ") +
@@ -49,13 +49,14 @@ func (m Model) renderHistorySidebar(width int) string {
 			r := history[i]
 
 			var dot, prefix string
-			if r.Trigger == "on_failure" {
+			switch r.Trigger {
+			case "on_failure":
 				dot = StyleStatusWarn.Render("●")
 				prefix = StyleStatusWarn.Render("↳")
-			} else if r.Trigger == "on_success" {
+			case "on_success":
 				dot = StyleStatusOk.Render("●")
 				prefix = StyleStatusOk.Render("↳")
-			} else {
+			default:
 				prefix = " "
 				if r.ExitCode == 0 {
 					dot = StyleStatusOk.Render("●")
@@ -96,11 +97,11 @@ func (m Model) renderHistoryMainPane() string {
 
 	if len(history) == 0 {
 		empty := StyleLogDim.Render("  No history yet. Run a task!")
-		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 4).Render(empty)
+		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 3).Render(empty)
 	}
 
 	if m.historySelected >= len(history) {
-		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 4).Render("")
+		return lipgloss.NewStyle().Width(mainWidth).Height(m.height - 3).Render("")
 	}
 	r := history[m.historySelected]
 
@@ -112,11 +113,12 @@ func (m Model) renderHistoryMainPane() string {
 	}
 
 	var triggerStr string
-	if r.Trigger == "on_failure" {
+	switch r.Trigger {
+	case "on_failure":
 		triggerStr = StyleStatusWarn.Render("↳ triggered by failure")
-	} else if r.Trigger == "on_success" {
+	case "on_success":
 		triggerStr = StyleStatusOk.Render("↳ triggered by success")
-	} else {
+	default:
 		triggerStr = StyleLogDim.Render(r.Trigger)
 	}
 	meta := StyleLogDim.Render(formatAge(r.StartTime)+" · "+fmtDuration(r.DurationMs)+" · ") + triggerStr

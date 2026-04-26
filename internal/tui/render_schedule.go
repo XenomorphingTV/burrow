@@ -9,7 +9,7 @@ import (
 )
 
 func (m Model) renderScheduleTab() string {
-	bodyHeight := m.height - 4
+	bodyHeight := m.height - 3
 
 	hintLine := StyleLogDim.Render("  ") +
 		StyleKey.Render("enter") + StyleLogDim.Render("/") + StyleKey.Render("space") +
