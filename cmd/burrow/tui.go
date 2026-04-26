@@ -9,6 +9,7 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/runner"
 	"github.com/XenomorphingTV/burrow/internal/store"
 	"github.com/XenomorphingTV/burrow/internal/tui"
+	v2 "github.com/XenomorphingTV/burrow/internal/tui/v2"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -62,7 +63,8 @@ func runTUI() error {
 	}
 	pool := runner.NewPool(maxParallel)
 
-	model := tui.New(cfg, st, sched, pool)
+	// model := tui.New(cfg, st, sched, pool)
+	model := v2.New(cfg, st, sched, pool)
 
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
