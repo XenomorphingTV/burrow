@@ -95,6 +95,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		m.taskView.Width = msg.Width
+		m.taskView.Height = msg.Height - 3
+		m.taskView.RecalcViewport()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -119,6 +122,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "q", "ctrl+c":
 		return m, tea.Quit
 	}
+
+	switch m.activeTab {
+	case TabTasks:
+		var cmd tea.Cmd
+		m.taskView, cmd = m.taskView.Update(msg)
+		return m, cmd
+	}
+
 	return m, nil
 }
 

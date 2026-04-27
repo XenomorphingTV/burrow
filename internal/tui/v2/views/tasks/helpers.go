@@ -1,8 +1,17 @@
 package tasks
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
+	"github.com/charmbracelet/bubbles/textinput"
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 type SidebarItem struct {
@@ -131,7 +140,7 @@ func truncateStr(str string, max int) string {
 	return string(runes[:max-3]) + "..."
 }
 
-func (m *Model) recalcViewport() {
+func (m *Model) RecalcViewport() {
 	const (
 		sidebarWidth   = 24
 		dividerWidth   = 1
@@ -158,4 +167,138 @@ func (m *Model) recalcViewport() {
 
 	m.Viewport.Width = vpWidth
 	m.Viewport.Height = vpHeight
+}
+
+func (m Model) initPromptStep() Model {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok || m.promptStep >= len(task.Inputs) {
+		return m
+	}
+
+	input := task.Inputs[m.promptStep]
+	if len(input.Options) > 0 {
+		m.promptOptCursor = 0
+		m.promptTextInput.Blur()
+	} else {
+		textInput := textinput.New()
+		textInput.Placeholder = input.Prompt
+		textInput.CharLimit = 256
+		textInput.Width = 40
+		textInput.Focus()
+		m.promptTextInput = textInput
+		m.promptOptCursor = 0
+	}
+	return m
+}
+
+func (m Model) advancePromptStep() (Model, tea.Cmd) {
+	task, ok := m.cfg.Tasks[m.promptTaskName]
+	if !ok {
+		m.promptMode = false
+		return m, nil
+	}
+	if m.promptStep >= len(task.Inputs) {
+		m.promptMode = false
+		return m, nil
+	}
+
+	input := task.Inputs[m.promptStep]
+	var value string
+	if len(input.Options) > 0 {
+		if m.promptOptCursor < len(input.Options) {
+			value = input.Options[m.promptOptCursor]
+		}
+	} else {
+		value = strings.TrimSpace(m.promptTextInput.Value())
+	}
+	m.promptValues[input.Name] = value
+	m.promptStep++
+
+	if m.promptStep >= len(task.Inputs) {
+		collected := make(map[string]string, len(m.promptValues))
+		for key, value := range m.promptValues {
+			collected[key] = value
+		}
+		m.promptMode = false
+		m.promptValues = make(map[string]string)
+		m.RecalcViewport()
+		return m, func() tea.Msg {
+			return messages.RunTaskMessage{
+				Name:    m.promptTaskName,
+				Trigger: "manual",
+				Env:     collected,
+			}
+		}
+	}
+
+	m = m.initPromptStep()
+	m.RecalcViewport()
+	return m, textinput.Blink
+}
+
+func configFileForTask(name string) string {
+	if local, err := config.LoadLocal(); err == nil {
+		if _, ok := local.Tasks[name]; ok {
+			if abs, err := filepath.Abs("burrow.toml"); err == nil {
+				return abs
+			}
+			return "burrow.toml"
+		}
+	}
+	return filepath.Join(config.DefaultConfigDir(), "tasks.toml")
+}
+
+func taskLineInFile(path, taskName string) int {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return 0
+	}
+
+	header := "[tasks." + taskName + "]"
+	for i, line := range strings.Split(string(data), "\n") {
+		if strings.TrimSpace(line) == header {
+			return i + 1
+		}
+	}
+	return 0
+}
+
+// openInEditor builds the exec.Cmd that opens path (at lineN, if > 0) in the
+// editor named by $EDITOR (defaulting to vi).
+func openInEditor(path string, lineN int) *exec.Cmd {
+	editor := os.Getenv("EDITOR")
+	if editor == "" {
+		editor = "vi"
+	}
+
+	if lineN <= 0 {
+		return exec.Command(editor, path)
+	}
+
+	base := filepath.Base(editor)
+	switch base {
+	case "hx", "helix", "code":
+		//	file:N - hx (Helix), code (VS Code)
+		return exec.Command(editor, fmt.Sprintf("%s:%d", path, lineN))
+	default:
+		//	+N file - vi, vim, nvim, nano, emacs, micro, kak
+		return exec.Command(editor, fmt.Sprintf("+%d", lineN), path)
+	}
+}
+
+func (m *Model) UpdateViewportForSelected() {
+	name := m.selectedTaskName()
+	lines := m.TaskLogs[name]
+	m.Viewport.SetContent(strings.Join(lines, "\n"))
+	if !m.ScrollLock {
+		m.Viewport.GotoBottom()
+	}
+}
+
+func (m *Model) UpdateViewportContent(name string) {
+	lines := m.TaskLogs[name]
+	m.Viewport.SetContent(strings.Join(lines, "\n"))
+	if !m.ScrollLock {
+		m.Viewport.GotoBottom()
+	}
 }

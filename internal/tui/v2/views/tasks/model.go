@@ -2,7 +2,6 @@ package tasks
 
 import (
 	"sort"
-	"strings"
 
 	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
@@ -142,7 +141,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.promptStep = 0
 			m.promptValues = make(map[string]string)
 			m = m.initPromptStep()
-			m.recalcViewport()
+			m.RecalcViewport()
 			return m, textinput.Blink
 		}
 		return m, func() tea.Msg {
@@ -178,7 +177,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		m.addTaskMode = true
 		m.addTaskStep = 0
 		m.addTaskInputs[0].Focus()
-		m.recalcViewport()
+		m.RecalcViewport()
 
 	case key.Matches(msg, m.keys.Filter):
 		m.FilterMode = true
@@ -206,19 +205,27 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 		path := configFileForTask(name)
 		line := taskLineInFile(path, name)
 		c := openInEditor(path, line)
-		return m, tea.Exec(c, func(err error) tea.Msg { return nil })
+		return m, tea.ExecProcess(c, func(err error) tea.Msg { return nil })
 	}
+
+	return m, nil
 }
 
 func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if m.promptMode {
-		return m.handlePromptKey(msg)
+		if keyMessage, ok := msg.(tea.KeyMsg); ok {
+			return m.handlePromptKey(keyMessage)
+		}
 	}
 	if m.addTaskMode {
-		return m.handleAddTask(msg)
+		if keyMessage, ok := msg.(tea.KeyMsg); ok {
+			return m.handleAddTask(keyMessage)
+		}
 	}
 	if m.FilterMode {
-		return m.handleFilterKey(msg)
+		if keyMessage, ok := msg.(tea.KeyMsg); ok {
+			return m.handleFilterKey(keyMessage)
+		}
 	}
 
 	if keyMessage, ok := msg.(tea.KeyMsg); ok {
@@ -226,21 +233,4 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	}
 
 	return m, nil
-}
-
-func (m *Model) UpdateViewportForSelected() {
-	name := m.selectedTaskName()
-	lines := m.TaskLogs[name]
-	m.Viewport.SetContent(strings.Join(lines, "\n"))
-	if !m.ScrollLock {
-		m.Viewport.GotoBottom()
-	}
-}
-
-func (m *Model) UpdateViewportContent(name string) {
-	lines := m.TaskLogs[name]
-	m.Viewport.SetContent(strings.Join(lines, "\n"))
-	if !m.ScrollLock {
-		m.Viewport.GotoBottom()
-	}
 }
