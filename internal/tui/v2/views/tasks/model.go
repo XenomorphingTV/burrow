@@ -2,11 +2,15 @@ package tasks
 
 import (
 	"sort"
+	"strings"
 
 	"github.com/XenomorphingTV/burrow/internal/config"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
 	style "github.com/XenomorphingTV/burrow/internal/tui/v2/styles"
+	"github.com/charmbracelet/bubbles/key"
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -110,5 +114,133 @@ func New(cfg *config.Config, styles style.Styles) Model {
 		CollapsedGroups: make(map[string]bool),
 		promptValues:    make(map[string]string),
 		addTaskInputs:   addInputs,
+	}
+}
+
+func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
+	switch {
+	case key.Matches(msg, m.keys.Up):
+		if m.Selected > 0 {
+			m.Selected--
+			m.UpdateViewportForSelected()
+		}
+
+	case key.Matches(msg, m.keys.Down):
+		if m.Selected < len(m.visibleItems())-1 {
+			m.Selected++
+			m.UpdateViewportForSelected()
+		}
+
+	case key.Matches(msg, m.keys.Run):
+		name := m.selectedTaskName()
+		if name == "" {
+			break
+		}
+		if task := m.cfg.Tasks[name]; len(task.Inputs) > 0 {
+			m.promptMode = true
+			m.promptTaskName = name
+			m.promptStep = 0
+			m.promptValues = make(map[string]string)
+			m = m.initPromptStep()
+			m.recalcViewport()
+			return m, textinput.Blink
+		}
+		return m, func() tea.Msg {
+			return messages.RunTaskMessage{Name: name, Trigger: "manual"}
+		}
+
+	case key.Matches(msg, m.keys.Kill):
+		name := m.selectedTaskName()
+		if name == "" {
+			break
+		}
+		return m, func() tea.Msg {
+			return messages.KillTaskMessage{Name: name}
+		}
+
+	case key.Matches(msg, m.keys.Clear):
+		name := m.selectedTaskName()
+		m.TaskLogs[name] = nil
+		m.ScrollLock = false
+		m.Viewport.SetContent("")
+
+	case key.Matches(msg, m.keys.ScrollUp):
+		m.ScrollLock = true
+		m.Viewport.HalfViewUp()
+
+	case key.Matches(msg, m.keys.ScrollDown):
+		m.Viewport.HalfViewDown()
+		if m.Viewport.AtBottom() {
+			m.ScrollLock = false
+		}
+
+	case key.Matches(msg, m.keys.AddTask):
+		m.addTaskMode = true
+		m.addTaskStep = 0
+		m.addTaskInputs[0].Focus()
+		m.recalcViewport()
+
+	case key.Matches(msg, m.keys.Filter):
+		m.FilterMode = true
+		m.FilterInput = ""
+
+	case key.Matches(msg, m.keys.Toggle):
+		items := m.visibleItems()
+		if m.Selected < len(items) && items[m.Selected].IsGroup {
+			selectedName := items[m.Selected].Name
+			if m.CollapsedGroups[selectedName] {
+				delete(m.CollapsedGroups, selectedName)
+			} else {
+				m.CollapsedGroups[selectedName] = true
+			}
+			if newLen := len(m.visibleItems()); m.Selected >= newLen {
+				m.Selected = max(0, newLen-1)
+			}
+		}
+
+	case key.Matches(msg, m.keys.Edit):
+		name := m.selectedTaskName()
+		if name == "" {
+			break
+		}
+		path := configFileForTask(name)
+		line := taskLineInFile(path, name)
+		c := openInEditor(path, line)
+		return m, tea.Exec(c, func(err error) tea.Msg { return nil })
+	}
+}
+
+func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
+	if m.promptMode {
+		return m.handlePromptKey(msg)
+	}
+	if m.addTaskMode {
+		return m.handleAddTask(msg)
+	}
+	if m.FilterMode {
+		return m.handleFilterKey(msg)
+	}
+
+	if keyMessage, ok := msg.(tea.KeyMsg); ok {
+		return m.handleKey(keyMessage)
+	}
+
+	return m, nil
+}
+
+func (m *Model) UpdateViewportForSelected() {
+	name := m.selectedTaskName()
+	lines := m.TaskLogs[name]
+	m.Viewport.SetContent(strings.Join(lines, "\n"))
+	if !m.ScrollLock {
+		m.Viewport.GotoBottom()
+	}
+}
+
+func (m *Model) UpdateViewportContent(name string) {
+	lines := m.TaskLogs[name]
+	m.Viewport.SetContent(strings.Join(lines, "\n"))
+	if !m.ScrollLock {
+		m.Viewport.GotoBottom()
 	}
 }

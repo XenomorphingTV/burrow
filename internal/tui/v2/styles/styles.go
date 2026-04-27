@@ -12,6 +12,9 @@ type Styles struct {
 	TaskRowSelected lipgloss.Style
 	TaskName        lipgloss.Style
 
+	GroupHeader lipgloss.Style
+	ActivePanel lipgloss.Style
+
 	Tag lipgloss.Style
 
 	LogHead lipgloss.Style
@@ -68,6 +71,15 @@ func NewStyle(t Theme) Styles {
 
 	s.TaskName = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Blue))
+
+	s.GroupHeader = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Blue)).
+		Bold(true).
+		Padding(0, 1)
+
+	s.ActivePanel = lipgloss.NewStyle().
+		Foreground(lipgloss.Color(t.Purple)).
+		Bold(true)
 
 	s.Tag = lipgloss.NewStyle().
 		Foreground(lipgloss.Color(t.Dim)).

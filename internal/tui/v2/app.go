@@ -51,6 +51,7 @@ type Model struct {
 	pipelineQueues map[string][]string
 	onFailureRuns  map[string]bool
 	onSuccessRuns  map[string]bool
+	pendingEnv     map[string]map[string]string
 
 	tickCount int
 }
@@ -85,6 +86,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		pipelineQueues: make(map[string][]string),
 		onFailureRuns:  make(map[string]bool),
 		onSuccessRuns:  make(map[string]bool),
+		pendingEnv:     make(map[string]map[string]string),
 	}
 }
 
@@ -126,4 +128,107 @@ func tick() tea.Cmd {
 	return tea.Tick(200*time.Millisecond, func(time.Time) tea.Msg {
 		return tickMsg{}
 	})
+}
+
+func (m Model) startTask(name, trigger string) (Model, tea.Cmd) {
+	if _, running := m.executors[name]; running {
+		return m, nil
+	}
+
+	task, ok := m.cfg.Tasks[name]
+	if !ok {
+		return m, nil
+	}
+
+	if extras, ok := m.pendingEnv[name]; ok {
+		merged := make(map[string]string, len(task.Env)+len(extras))
+		for k, v := range task.Env {
+			merged[k] = v
+		}
+		for k, v := range extras {
+			merged[k] = v
+		}
+		task.Env = merged
+		delete(m.pendingEnv, name)
+	}
+
+	if task.External {
+		m.taskView.TaskLogs[name] = nil
+		m.taskView.ScrollLock = false
+		err := runner.LaunchExternal(task.Cmd, task.Cwd, m.cfg.Settings.Terminal, task.Env)
+		var msg string
+		if err != nil {
+			msg = "[err] " + err.Error()
+		} else {
+			msg = "launched in external terminal"
+		}
+		m.taskView.TaskLogs[name] = []string{"$ " + task.Cmd, msg}
+		m.taskView.UpdateViewportForSelected() // TODO: implement on tasks.Model
+		return m, nil
+	}
+
+	if !m.pool.TryAcquire() {
+		return m, nil
+	}
+
+	exec := runner.NewExecutor(name, task, trigger, m.cfg.Settings.LogDir, m.st, m.cfg.Settings.Notify)
+	exec.Start()
+	m.executors[name] = exec
+
+	for i, t := range m.taskView.Tasks {
+		if t.Name == name {
+			m.taskView.Tasks[i].Status = tasks.StatusRunning
+			break
+		}
+	}
+
+	m.taskView.TaskLogs[name] = nil
+	m.taskView.ScrollLock = false
+
+	return m, awaitLog(exec.LogCh())
+}
+
+func (m Model) startPipeline(target, trigger string) (Model, tea.Cmd) {
+	ordered, err := runner.Resolve(target, m.cfg.Tasks)
+	if err != nil || len(ordered) == 0 {
+		return m, nil
+	}
+
+	if len(ordered) == 1 {
+		return m.startTask(ordered[0], trigger)
+	}
+
+	m.pipelineQueues[ordered[0]] = ordered[1:]
+	return m.startTask(ordered[0], "pipeline")
+}
+
+func (m Model) fireOnFailure(parentName, onFailure string) (Model, tea.Cmd) {
+	if _, ok := m.cfg.Tasks[onFailure]; ok {
+		m.onFailureRuns[onFailure] = true
+		return m.startTask(onFailure, "on_failure")
+	}
+
+	return m, func() tea.Msg {
+		task := config.Task{Cmd: onFailure}
+		exec := runner.NewExecutor(parentName+".on_failure", task, "on_failure", m.cfg.Settings.LogDir, m.st, nil)
+		exec.Start()
+		for range exec.LogCh() {
+		}
+		return nil
+	}
+}
+
+func (m Model) fireOnSuccess(parentName, onSuccess string) (Model, tea.Cmd) {
+	if _, ok := m.cfg.Tasks[onSuccess]; ok {
+		m.onSuccessRuns[onSuccess] = true
+		return m.startTask(onSuccess, "on_success")
+	}
+	return m, func() tea.Msg {
+		task := config.Task{Cmd: onSuccess}
+		exec := runner.NewExecutor(parentName+".on_success", task, "on_success", m.cfg.Settings.LogDir, m.st, nil)
+		exec.Start()
+		for range exec.LogCh() {
+		}
+		return nil
+	}
 }
