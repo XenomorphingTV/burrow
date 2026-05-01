@@ -12,6 +12,7 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 type SidebarItem struct {
@@ -26,11 +27,23 @@ func taskNamespace(name string) string {
 	return ""
 }
 
+func taskLocalName(name string) string {
+	if i := strings.IndexByte(name, '.'); i >= 0 {
+		return name[i+1:]
+	}
+	return name
+}
+
 func (m Model) selectedTaskName() string {
-	if len(m.Tasks) == 0 || m.Selected >= len(m.Tasks) {
+	items := m.visibleItems()
+	if m.Selected < 0 || m.Selected >= len(items) {
 		return ""
 	}
-	return m.Tasks[m.Selected].Name
+	item := items[m.Selected]
+	if item.IsGroup {
+		return ""
+	}
+	return item.Name
 }
 
 func (m Model) visibleItems() []SidebarItem {
@@ -140,14 +153,18 @@ func truncateStr(str string, max int) string {
 	return string(runes[:max-3]) + "..."
 }
 
-func (m *Model) RecalcViewport() {
-	const (
-		sidebarWidth   = 24
-		dividerWidth   = 1
-		headingPadding = 2
-		logHeadLines   = 3
-	)
+// headHeight returns the number of lines the main pane header occupies:
+// task name + status badge, description, and separator.
+func (m Model) headHeight() int {
+	return 3
+}
 
+// dividerWidth returns the visual column width of the sidebar divider.
+func (m Model) dividerWidth() int {
+	return lipgloss.Width(m.styles.LogDim.Render("│"))
+}
+
+func (m *Model) RecalcViewport() {
 	extraPanelHeight := 0
 	if m.addTaskMode {
 		extraPanelHeight = 9
@@ -155,12 +172,12 @@ func (m *Model) RecalcViewport() {
 		extraPanelHeight = m.promptPanelHeight()
 	}
 
-	vpWidth := m.Width - sidebarWidth - dividerWidth - headingPadding
+	vpWidth := m.Width - m.SidebarWidth - m.dividerWidth()
 	if vpWidth < 10 {
 		vpWidth = 10
 	}
 
-	vpHeight := m.Height - logHeadLines - extraPanelHeight
+	vpHeight := m.Height - m.headHeight() - extraPanelHeight
 	if vpHeight < 3 {
 		vpHeight = 3
 	}
@@ -277,11 +294,14 @@ func openInEditor(path string, lineN int) *exec.Cmd {
 
 	base := filepath.Base(editor)
 	switch base {
-	case "hx", "helix", "code":
-		//	file:N - hx (Helix), code (VS Code)
+	case "code":
+		// VS Code requires --goto for file:line syntax; without it the colon is treated as part of the filename
+		return exec.Command(editor, "--goto", fmt.Sprintf("%s:%d", path, lineN))
+	case "hx", "helix":
+		// file:N
 		return exec.Command(editor, fmt.Sprintf("%s:%d", path, lineN))
 	default:
-		//	+N file - vi, vim, nvim, nano, emacs, micro, kak
+		// +N file — vi, vim, nvim, nano, emacs, micro, kak
 		return exec.Command(editor, fmt.Sprintf("+%d", lineN), path)
 	}
 }

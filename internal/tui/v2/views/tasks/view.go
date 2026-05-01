@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/charmbracelet/lipgloss"
 )
 
@@ -92,9 +93,8 @@ func (m Model) renderPromptPanel() string {
 }
 
 func (m Model) View() string {
-	sidebarWidth := 24
 	divider := m.styles.LogDim.Render("│")
-	sidebar := m.renderSidebar(sidebarWidth)
+	sidebar := m.renderSidebar(m.SidebarWidth)
 	mainPane := m.renderMainPane()
 
 	body := lipgloss.JoinHorizontal(lipgloss.Top,
@@ -114,18 +114,84 @@ func (m Model) View() string {
 
 func (m Model) renderSidebar(width int) string {
 	var lines []string
-	lines = append(lines, m.styles.SidebarHead.Width(width).Render("TASKS"))
+	switch {
+	case m.FilterMode:
+		lines = append(lines, m.styles.SidebarHead.Width(width).Render("/"+m.FilterInput+"_"))
+	case m.FilterInput != "":
+		lines = append(lines, m.styles.SidebarHead.Width(width).Render("/"+m.FilterInput))
+	default:
+		lines = append(lines, m.styles.SidebarHead.Width(width).Render("TASKS"))
+	}
 
-	for i, task := range m.Tasks {
-		row := m.statusDot(task.Status) + " " + task.Name
-		if i == m.Selected {
+	groupCount := make(map[string]int)
+	for _, t := range m.filteredTasks() {
+		if ns := taskNamespace(t.Name); ns != "" {
+			groupCount[ns]++
+		}
+	}
+
+	entryByName := make(map[string]TaskEntry, len(m.Tasks))
+	for _, t := range m.Tasks {
+		entryByName[t.Name] = t
+	}
+
+	for i, item := range m.visibleItems() {
+		isSelected := i == m.Selected
+
+		if item.IsGroup {
+			arrow := "▼ "
+			label := item.Name
+			if m.CollapsedGroups[item.Name] {
+				arrow = "▶ "
+				label = fmt.Sprintf("%s (%d)", item.Name, groupCount[item.Name])
+			}
+			if isSelected {
+				lines = append(lines, m.styles.TaskRowSelected.Width(width).Render(arrow+label))
+			} else {
+				lines = append(lines, m.styles.GroupHeader.Width(width).Render(arrow+label))
+			}
+			continue
+		}
+
+		entry := entryByName[item.Name]
+		prefix := ""
+		if taskNamespace(item.Name) != "" {
+			prefix = "  "
+		}
+
+		var suffix string
+		switch entry.Status {
+		case StatusRunning:
+			frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+			suffix = m.styles.StatusRunning.Render(frames[m.TickCount%len(frames)])
+		case StatusSuccess:
+			suffix = m.styles.StatusOk.Render(fmt.Sprintf("%dms", entry.DurationMs))
+		case StatusFailed:
+			suffix = m.styles.StatusFailed.Render(fmt.Sprintf("x%d", entry.ExitCode))
+		case StatusWatching:
+			suffix = m.styles.StatusWarn.Render("[watching]")
+		}
+
+		row := prefix + m.statusDot(entry.Status) + " " + taskLocalName(item.Name)
+		if suffix != "" {
+			row += " " + suffix
+		}
+
+		if isSelected {
 			lines = append(lines, m.styles.TaskRowSelected.Width(width).Render(row))
 		} else {
 			lines = append(lines, m.styles.TaskRowNormal.Width(width).Render(row))
 		}
 	}
 
-	for len(lines) < m.Height-3 {
+	extraPanelHeight := 0
+	if m.addTaskMode {
+		extraPanelHeight = 9
+	} else if m.promptMode {
+		extraPanelHeight = m.promptPanelHeight()
+	}
+	sidebarHeight := m.Height - 3 - extraPanelHeight
+	for len(lines) < sidebarHeight {
 		lines = append(lines, m.styles.TaskRowNormal.Width(width).Render(""))
 	}
 
@@ -134,7 +200,59 @@ func (m Model) renderSidebar(width int) string {
 
 func (m Model) renderMainPane() string {
 	name := m.selectedTaskName()
-	return m.styles.LogHead.Render(name)
+
+	var task config.Task
+	var status TaskStatus
+	for _, t := range m.Tasks {
+		if t.Name == name {
+			task = t.Cfg
+			status = t.Status
+			break
+		}
+	}
+
+	// Bake the header background into badge styles so they don't bleed
+	// the terminal default when nested inside LogHead's render.
+	headerBg := m.styles.LogHead.GetBackground()
+	var statusBadge string
+	switch status {
+	case StatusRunning:
+		statusBadge = m.styles.StatusRunning.Background(headerBg).Render("[running]")
+	case StatusSuccess:
+		statusBadge = m.styles.StatusOk.Background(headerBg).Render("[ok]")
+	case StatusFailed:
+		statusBadge = m.styles.StatusFailed.Background(headerBg).Render("[failed]")
+	case StatusWatching:
+		statusBadge = m.styles.StatusWarn.Background(headerBg).Render("[watching]")
+	default:
+		statusBadge = m.styles.StatusIdle.Background(headerBg).Render("[idle]")
+	}
+
+	mainWidth := m.Viewport.Width
+	// LogHead has Padding(0,1) so its text area is 2 chars narrower
+	contentWidth := mainWidth - 2
+
+	bgStyle := lipgloss.NewStyle().Background(headerBg)
+
+	var scrollHint string
+	if m.ScrollLock {
+		scrollHint = bgStyle.Render("  ") + m.styles.LogDim.Background(headerBg).Render("↑ scrolled · pgdn to follow")
+	}
+
+	headLine1 := m.styles.LogHead.Width(mainWidth).Render(
+		m.styles.LogName.Background(headerBg).Render(name) +
+			bgStyle.Render("  ") +
+			statusBadge +
+			scrollHint,
+	)
+	// Truncate so description never wraps — extra lines push the tab bar off screen
+	headLine2 := m.styles.LogHead.Width(mainWidth).Render(
+		m.styles.LogCmd.Background(headerBg).Render(truncateStr(task.Description, contentWidth)),
+	)
+	headLine3 := m.styles.LogDim.Width(mainWidth).Render(strings.Repeat("─", mainWidth))
+
+	head := lipgloss.JoinVertical(lipgloss.Left, headLine1, headLine2, headLine3)
+	return lipgloss.JoinVertical(lipgloss.Left, head, m.Viewport.View())
 }
 
 func (m Model) statusDot(status TaskStatus) string {

@@ -39,8 +39,9 @@ type Model struct {
 	styles style.Styles
 	keys   KeyMap
 
-	Width  int
-	Height int
+	Width       int
+	Height      int
+	SidebarWidth int
 
 	Tasks    []TaskEntry
 	Selected int
@@ -113,6 +114,7 @@ func New(cfg *config.Config, styles style.Styles) Model {
 		CollapsedGroups: make(map[string]bool),
 		promptValues:    make(map[string]string),
 		addTaskInputs:   addInputs,
+		SidebarWidth:    24,
 	}
 }
 

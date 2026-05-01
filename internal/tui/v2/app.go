@@ -8,6 +8,7 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/runner"
 	"github.com/XenomorphingTV/burrow/internal/store"
 	style "github.com/XenomorphingTV/burrow/internal/tui/v2/styles"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/tasks"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -47,17 +48,25 @@ type Model struct {
 
 	// Orchestration state — not owned by any sub-view.
 	executors      map[string]*runner.Executor
+	taskStartTimes map[string]time.Time
 	watchers       map[string]context.CancelFunc
 	pipelineQueues map[string][]string
 	onFailureRuns  map[string]bool
 	onSuccessRuns  map[string]bool
 	pendingEnv     map[string]map[string]string
 
-	tickCount int
+	tickCount   int
+	pendingQuit bool
 }
 
 func (m Model) Init() tea.Cmd {
 	return tick()
+}
+
+// contentHeight returns the vertical space available for the active tab view.
+// Subtract tab bar and status bar heights here as they are added.
+func (m Model) contentHeight() int {
+	return m.height
 }
 
 func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *runner.Pool) Model {
@@ -82,6 +91,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		// serviceView: services.New(style),
 
 		executors:      make(map[string]*runner.Executor),
+		taskStartTimes: make(map[string]time.Time),
 		watchers:       make(map[string]context.CancelFunc),
 		pipelineQueues: make(map[string][]string),
 		onFailureRuns:  make(map[string]bool),
@@ -96,7 +106,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width = msg.Width
 		m.height = msg.Height
 		m.taskView.Width = msg.Width
-		m.taskView.Height = msg.Height - 3
+		m.taskView.Height = m.contentHeight()
 		m.taskView.RecalcViewport()
 		return m, nil
 
@@ -105,7 +115,109 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		m.tickCount++
+		m.taskView.TickCount = m.tickCount
 		return m, tick()
+
+	case messages.RunTaskMessage:
+		if len(msg.Env) > 0 {
+			m.pendingEnv[msg.Name] = msg.Env
+		}
+		return m.startPipeline(msg.Name, msg.Trigger)
+
+	case messages.KillTaskMessage:
+		exec, ok := m.executors[msg.Name]
+		if !ok {
+			break
+		}
+		exec.Kill()
+		if cancel, ok := m.watchers[msg.Name]; ok {
+			cancel()
+			delete(m.watchers, msg.Name)
+		}
+		for i, t := range m.taskView.Tasks {
+			if t.Name == msg.Name {
+				m.taskView.Tasks[i].Status = tasks.StatusFailed
+				break
+			}
+		}
+
+	case runner.LogLine:
+		name := msg.TaskName
+		if msg.Done {
+			delete(m.executors, name)
+			m.pool.Release()
+
+			durationMs := int64(0)
+			if start, ok := m.taskStartTimes[name]; ok {
+				durationMs = time.Since(start).Milliseconds()
+				delete(m.taskStartTimes, name)
+			}
+
+			status := tasks.StatusSuccess
+			if msg.ExitCode != 0 {
+				status = tasks.StatusFailed
+			}
+			for i, t := range m.taskView.Tasks {
+				if t.Name == name {
+					m.taskView.Tasks[i].Status = status
+					m.taskView.Tasks[i].DurationMs = durationMs
+					m.taskView.Tasks[i].ExitCode = msg.ExitCode
+					break
+				}
+			}
+			m.taskView.UpdateViewportForSelected()
+
+			// Continue pipeline if task succeeded
+			if msg.ExitCode == 0 {
+				if queue, ok := m.pipelineQueues[name]; ok && len(queue) > 0 {
+					next := queue[0]
+					remaining := queue[1:]
+					delete(m.pipelineQueues, name)
+					if len(remaining) > 0 {
+						m.pipelineQueues[next] = remaining
+					}
+					return m.startTask(next, "pipeline")
+				}
+			}
+
+			// Fire hooks
+			task, ok := m.cfg.Tasks[name]
+			if ok {
+				if msg.ExitCode == 0 && task.OnSuccess != "" && !m.onSuccessRuns[name] {
+					return m.fireOnSuccess(name, task.OnSuccess)
+				}
+				if msg.ExitCode != 0 && task.OnFailure != "" && !m.onFailureRuns[name] {
+					return m.fireOnFailure(name, task.OnFailure)
+				}
+				// Start watcher if task has watch patterns and succeeded
+				if msg.ExitCode == 0 && len(task.Watch) > 0 {
+					ctx, cancel := context.WithCancel(context.Background())
+					m.watchers[name] = cancel
+					for i, t := range m.taskView.Tasks {
+						if t.Name == name {
+							m.taskView.Tasks[i].Status = tasks.StatusWatching
+							break
+						}
+					}
+					return m, startWatcher(ctx, name, task.Watch, task.Cwd)
+				}
+			}
+			delete(m.onSuccessRuns, name)
+			delete(m.onFailureRuns, name)
+			return m, nil
+		}
+
+		// Streaming line — append and keep listening
+		m.taskView.TaskLogs[name] = append(m.taskView.TaskLogs[name], msg.Text)
+		m.taskView.UpdateViewportForSelected()
+		exec, ok := m.executors[name]
+		if !ok {
+			return m, nil
+		}
+		return m, awaitLog(exec.LogCh())
+
+	case messages.WatchTriggeredMessage:
+		return m.startTask(msg.TaskName, "watch")
 	}
 	return m, nil
 }
@@ -120,7 +232,13 @@ func (m Model) View() string {
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
 	case "q", "ctrl+c":
-		return m, tea.Quit
+		if m.pendingQuit {
+			return m, tea.Quit
+		}
+		m.pendingQuit = true
+		return m, nil
+	default:
+		m.pendingQuit = false
 	}
 
 	switch m.activeTab {
@@ -185,6 +303,7 @@ func (m Model) startTask(name, trigger string) (Model, tea.Cmd) {
 	exec := runner.NewExecutor(name, task, trigger, m.cfg.Settings.LogDir, m.st, m.cfg.Settings.Notify)
 	exec.Start()
 	m.executors[name] = exec
+	m.taskStartTimes[name] = time.Now()
 
 	for i, t := range m.taskView.Tasks {
 		if t.Name == name {
