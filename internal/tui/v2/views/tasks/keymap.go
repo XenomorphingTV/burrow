@@ -12,7 +12,6 @@ type KeyMap struct {
 	Kill       key.Binding
 	Clear      key.Binding
 	Edit       key.Binding
-	AddTask    key.Binding
 	Filter     key.Binding
 	Toggle     key.Binding
 }
@@ -27,7 +26,6 @@ func DefaultKeyMap() KeyMap {
 		Kill:       key.NewBinding(key.WithKeys("x"), key.WithHelp("x", "kill")),
 		Clear:      key.NewBinding(key.WithKeys("l"), key.WithHelp("l", "clear log")),
 		Edit:       key.NewBinding(key.WithKeys("e"), key.WithHelp("e", "edit")),
-		AddTask:    key.NewBinding(key.WithKeys("a"), key.WithHelp("a", "add task")),
 		Filter:     key.NewBinding(key.WithKeys("/"), key.WithHelp("/", "filter")),
 		Toggle:     key.NewBinding(key.WithKeys("enter", " "), key.WithHelp("enter", "collapse/expand")),
 	}

@@ -8,39 +8,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-func (m Model) renderAddTaskPanel() string {
-	labels := []string{"name", "cmd", "description", "tags", "cwd"}
-
-	separator := m.styles.LogDim.Render("  " + strings.Repeat("─", m.Width-4))
-	title := m.styles.SectionTitle.Render("  add task") +
-		m.styles.LogDim.Render("  (tab=next · shift+tab=prev · enter=save · esc=cancel · saves to global config)")
-
-	var fieldLines []string
-	for i, input := range m.addTaskInputs {
-		label := fmt.Sprintf("  %-14s", labels[i]+":")
-		var labelStr string
-		if i == m.addTaskStep {
-			labelStr = m.styles.ActivePanel.Render(label)
-		} else {
-			labelStr = m.styles.LogDim.Render(label)
-		}
-		fieldLines = append(fieldLines, labelStr+input.View())
-	}
-
-	var errLine string
-	if m.addTaskErr != "" {
-		errLine = "  " + m.styles.LogErr.Render(m.addTaskErr)
-	}
-
-	lines := []string{separator, title}
-	lines = append(lines, fieldLines...)
-	lines = append(lines, errLine)
-	for len(lines) < 9 {
-		lines = append(lines, "")
-	}
-	return strings.Join(lines[:9], "\n")
-}
-
 func (m Model) renderPromptPanel() string {
 	task, ok := m.cfg.Tasks[m.promptTaskName]
 	if !ok {
@@ -93,7 +60,17 @@ func (m Model) renderPromptPanel() string {
 }
 
 func (m Model) View() string {
-	divider := m.styles.LogDim.Render("│")
+	extraPanelHeight := 0
+	if m.promptMode {
+		extraPanelHeight = m.promptPanelHeight()
+	}
+	divH := m.Height - extraPanelHeight
+	divLines := make([]string, divH)
+	for i := range divLines {
+		divLines[i] = m.styles.LogDim.Render("│")
+	}
+	divider := strings.Join(divLines, "\n")
+
 	sidebar := m.renderSidebar(m.SidebarWidth)
 	mainPane := m.renderMainPane()
 
@@ -102,9 +79,6 @@ func (m Model) View() string {
 		divider,
 		mainPane,
 	)
-	if m.addTaskMode {
-		return body + "\n" + m.renderAddTaskPanel()
-	}
 	if m.promptMode {
 		return body + "\n" + m.renderPromptPanel()
 	}
@@ -185,12 +159,10 @@ func (m Model) renderSidebar(width int) string {
 	}
 
 	extraPanelHeight := 0
-	if m.addTaskMode {
-		extraPanelHeight = 9
-	} else if m.promptMode {
+	if m.promptMode {
 		extraPanelHeight = m.promptPanelHeight()
 	}
-	sidebarHeight := m.Height - 3 - extraPanelHeight
+	sidebarHeight := m.Height - extraPanelHeight
 	for len(lines) < sidebarHeight {
 		lines = append(lines, m.styles.TaskRowNormal.Width(width).Render(""))
 	}
@@ -211,44 +183,46 @@ func (m Model) renderMainPane() string {
 		}
 	}
 
-	// Bake the header background into badge styles so they don't bleed
-	// the terminal default when nested inside LogHead's render.
 	headerBg := m.styles.LogHead.GetBackground()
-	var statusBadge string
-	switch status {
-	case StatusRunning:
-		statusBadge = m.styles.StatusRunning.Background(headerBg).Render("[running]")
-	case StatusSuccess:
-		statusBadge = m.styles.StatusOk.Background(headerBg).Render("[ok]")
-	case StatusFailed:
-		statusBadge = m.styles.StatusFailed.Background(headerBg).Render("[failed]")
-	case StatusWatching:
-		statusBadge = m.styles.StatusWarn.Background(headerBg).Render("[watching]")
-	default:
-		statusBadge = m.styles.StatusIdle.Background(headerBg).Render("[idle]")
-	}
-
 	mainWidth := m.Viewport.Width
-	// LogHead has Padding(0,1) so its text area is 2 chars narrower
 	contentWidth := mainWidth - 2
-
 	bgStyle := lipgloss.NewStyle().Background(headerBg)
 
-	var scrollHint string
-	if m.ScrollLock {
-		scrollHint = bgStyle.Render("  ") + m.styles.LogDim.Background(headerBg).Render("↑ scrolled · pgdn to follow")
-	}
+	var headLine1, headLine2 string
+	if name == "" {
+		headLine1 = m.styles.LogHead.Width(mainWidth).Render("")
+		headLine2 = m.styles.LogHead.Width(mainWidth).Render("")
+	} else {
+		var statusBadge string
+		switch status {
+		case StatusRunning:
+			statusBadge = m.styles.StatusRunning.Background(headerBg).Render("[running]")
+		case StatusSuccess:
+			statusBadge = m.styles.StatusOk.Background(headerBg).Render("[ok]")
+		case StatusFailed:
+			statusBadge = m.styles.StatusFailed.Background(headerBg).Render("[failed]")
+		case StatusWatching:
+			statusBadge = m.styles.StatusWarn.Background(headerBg).Render("[watching]")
+		default:
+			statusBadge = m.styles.StatusIdle.Background(headerBg).Render("[idle]")
+		}
 
-	headLine1 := m.styles.LogHead.Width(mainWidth).Render(
-		m.styles.LogName.Background(headerBg).Render(name) +
-			bgStyle.Render("  ") +
-			statusBadge +
-			scrollHint,
-	)
-	// Truncate so description never wraps — extra lines push the tab bar off screen
-	headLine2 := m.styles.LogHead.Width(mainWidth).Render(
-		m.styles.LogCmd.Background(headerBg).Render(truncateStr(task.Description, contentWidth)),
-	)
+		var scrollHint string
+		if m.ScrollLock {
+			scrollHint = bgStyle.Render("  ") + m.styles.LogDim.Background(headerBg).Render("↑ scrolled · pgdn to follow")
+		}
+
+		headLine1 = m.styles.LogHead.Width(mainWidth).Render(
+			m.styles.LogName.Background(headerBg).Render(name) +
+				bgStyle.Render("  ") +
+				statusBadge +
+				scrollHint,
+		)
+		// Truncate so description never wraps — extra lines push the tab bar off screen
+		headLine2 = m.styles.LogHead.Width(mainWidth).Render(
+			m.styles.LogCmd.Background(headerBg).Render(truncateStr(task.Description, contentWidth)),
+		)
+	}
 	headLine3 := m.styles.LogDim.Width(mainWidth).Render(strings.Repeat("─", mainWidth))
 
 	head := lipgloss.JoinVertical(lipgloss.Left, headLine1, headLine2, headLine3)

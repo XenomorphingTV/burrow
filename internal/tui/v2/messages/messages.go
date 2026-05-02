@@ -1,7 +1,5 @@
 package messages
 
-import "github.com/XenomorphingTV/burrow/internal/config"
-
 type RunTaskMessage struct {
 	Name    string
 	Trigger string
@@ -23,11 +21,6 @@ type EditCronMessage struct {
 }
 
 type ClearHistoryMessage struct {
-}
-
-type AddTaskMessage struct {
-	Name string
-	Task config.Task
 }
 
 // WatchTriggeredMsg is sent when a watched file changes.

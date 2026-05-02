@@ -134,7 +134,6 @@ func NewStyle(t Theme) Styles {
 		Foreground(lipgloss.Color(t.Text))
 
 	s.StatusBar = lipgloss.NewStyle().
-		Background(lipgloss.Color(t.BgHeader)).
 		Foreground(lipgloss.Color(t.Dim)).
 		Padding(0, 1)
 

@@ -56,11 +56,6 @@ type Model struct {
 	CollapsedGroups map[string]bool
 	TickCount       int
 
-	addTaskMode   bool
-	addTaskStep   int
-	addTaskInputs []textinput.Model
-	addTaskErr    string
-
 	promptMode      bool
 	promptTaskName  string
 	promptStep      int
@@ -72,22 +67,6 @@ type Model struct {
 func New(cfg *config.Config, styles style.Styles) Model {
 	vp := viewport.New(80, 20)
 	vp.Style = lipgloss.NewStyle().Background(styles.Base.GetBackground())
-
-	placeholders := []string{
-		"task-name (required)",
-		"bash ~/scripts/foo.sh (required)",
-		"What this task does",
-		"tag1,tag2",
-		"~/projects/foo",
-	}
-	addInputs := make([]textinput.Model, 5)
-	for i := range addInputs {
-		ai := textinput.New()
-		ai.Placeholder = placeholders[i]
-		ai.CharLimit = 256
-		ai.Width = 40
-		addInputs[i] = ai
-	}
 
 	var taskNames []string
 	for name := range cfg.Tasks {
@@ -113,7 +92,6 @@ func New(cfg *config.Config, styles style.Styles) Model {
 		Viewport:        vp,
 		CollapsedGroups: make(map[string]bool),
 		promptValues:    make(map[string]string),
-		addTaskInputs:   addInputs,
 		SidebarWidth:    24,
 	}
 }
@@ -175,12 +153,6 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			m.ScrollLock = false
 		}
 
-	case key.Matches(msg, m.keys.AddTask):
-		m.addTaskMode = true
-		m.addTaskStep = 0
-		m.addTaskInputs[0].Focus()
-		m.RecalcViewport()
-
 	case key.Matches(msg, m.keys.Filter):
 		m.FilterMode = true
 		m.FilterInput = ""
@@ -217,11 +189,6 @@ func (m Model) Update(msg tea.Msg) (Model, tea.Cmd) {
 	if m.promptMode {
 		if keyMessage, ok := msg.(tea.KeyMsg); ok {
 			return m.handlePromptKey(keyMessage)
-		}
-	}
-	if m.addTaskMode {
-		if keyMessage, ok := msg.(tea.KeyMsg); ok {
-			return m.handleAddTask(keyMessage)
 		}
 	}
 	if m.FilterMode {

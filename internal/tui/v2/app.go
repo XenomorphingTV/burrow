@@ -63,10 +63,13 @@ func (m Model) Init() tea.Cmd {
 	return tick()
 }
 
-// contentHeight returns the vertical space available for the active tab view.
-// Subtract tab bar and status bar heights here as they are added.
+// contentHeight returns the vertical space available for the active tab view,
+// subtracting the tab bar (2 lines: bar + separator) and status bar (1 line).
 func (m Model) contentHeight() int {
-	return m.height
+	if m.height == 0 {
+		return 0
+	}
+	return m.height - 4 // 2 for tab bar (bar + separator) + 2 for status bar (separator + bar)
 }
 
 func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *runner.Pool) Model {
@@ -226,16 +229,38 @@ func (m Model) View() string {
 	if m.width == 0 {
 		return "Loading..."
 	}
-	return m.taskView.View()
+	var content string
+	switch m.activeTab {
+	case TabTasks:
+		content = m.taskView.View()
+	default:
+		content = ""
+	}
+	full := m.renderTabBar() + "\n" + content + "\n" + m.renderStatusBar()
+	if m.showHelp {
+		return m.renderHelpOverlay(full)
+	}
+	return full
 }
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.showHelp {
+		switch msg.String() {
+		case "?", "esc":
+			m.showHelp = false
+		}
+		return m, nil
+	}
+
 	switch msg.String() {
 	case "q", "ctrl+c":
 		if m.pendingQuit {
 			return m, tea.Quit
 		}
 		m.pendingQuit = true
+		return m, nil
+	case "?":
+		m.showHelp = !m.showHelp
 		return m, nil
 	default:
 		m.pendingQuit = false

@@ -166,9 +166,7 @@ func (m Model) dividerWidth() int {
 
 func (m *Model) RecalcViewport() {
 	extraPanelHeight := 0
-	if m.addTaskMode {
-		extraPanelHeight = 9
-	} else if m.promptMode {
+	if m.promptMode {
 		extraPanelHeight = m.promptPanelHeight()
 	}
 
