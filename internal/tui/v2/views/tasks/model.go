@@ -55,6 +55,7 @@ type Model struct {
 
 	CollapsedGroups map[string]bool
 	TickCount       int
+	sidebarScroll   int
 
 	promptMode      bool
 	promptTaskName  string
@@ -101,12 +102,14 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case key.Matches(msg, m.keys.Up):
 		if m.Selected > 0 {
 			m.Selected--
+			m.scrollToSelected()
 			m.UpdateViewportForSelected()
 		}
 
 	case key.Matches(msg, m.keys.Down):
 		if m.Selected < len(m.visibleItems())-1 {
 			m.Selected++
+			m.scrollToSelected()
 			m.UpdateViewportForSelected()
 		}
 
@@ -169,6 +172,7 @@ func (m Model) handleKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 			if newLen := len(m.visibleItems()); m.Selected >= newLen {
 				m.Selected = max(0, newLen-1)
 			}
+			m.scrollToSelected()
 		}
 
 	case key.Matches(msg, m.keys.Edit):

@@ -109,7 +109,19 @@ func (m Model) renderSidebar(width int) string {
 		entryByName[t.Name] = t
 	}
 
-	for i, item := range m.visibleItems() {
+	extraPanelHeight := 0
+	if m.promptMode {
+		extraPanelHeight = m.promptPanelHeight()
+	}
+	sidebarHeight := m.Height - extraPanelHeight
+
+	items := m.visibleItems()
+	end := m.sidebarScroll + sidebarHeight - 1 // -1 for the header line
+	if end > len(items) {
+		end = len(items)
+	}
+	for i := m.sidebarScroll; i < end; i++ {
+		item := items[i]
 		isSelected := i == m.Selected
 
 		if item.IsGroup {
@@ -133,20 +145,45 @@ func (m Model) renderSidebar(width int) string {
 			prefix = "  "
 		}
 
-		var suffix string
-		switch entry.Status {
-		case StatusRunning:
+		selBg := m.styles.TaskRowSelected.GetBackground()
+		var dot, name, suffix string
+		if isSelected {
 			frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
-			suffix = m.styles.StatusRunning.Render(frames[m.TickCount%len(frames)])
-		case StatusSuccess:
-			suffix = m.styles.StatusOk.Render(fmt.Sprintf("%dms", entry.DurationMs))
-		case StatusFailed:
-			suffix = m.styles.StatusFailed.Render(fmt.Sprintf("x%d", entry.ExitCode))
-		case StatusWatching:
-			suffix = m.styles.StatusWarn.Render("[watching]")
+			switch entry.Status {
+			case StatusRunning:
+				dot = m.styles.StatusRunning.Background(selBg).Render("●")
+				suffix = m.styles.StatusRunning.Background(selBg).Render(frames[m.TickCount%len(frames)])
+			case StatusSuccess:
+				dot = m.styles.StatusOk.Background(selBg).Render("●")
+				suffix = m.styles.StatusOk.Background(selBg).Render(fmt.Sprintf("%dms", entry.DurationMs))
+			case StatusFailed:
+				dot = m.styles.StatusFailed.Background(selBg).Render("●")
+				suffix = m.styles.StatusFailed.Background(selBg).Render(fmt.Sprintf("x%d", entry.ExitCode))
+			case StatusWatching:
+				dot = m.styles.StatusWarn.Background(selBg).Render("●")
+			default:
+				dot = m.styles.StatusIdle.Background(selBg).Render("●")
+			}
+			name = lipgloss.NewStyle().Background(selBg).Foreground(m.styles.TaskRowSelected.GetForeground()).Render(" " + taskLocalName(item.Name))
+		} else {
+			switch entry.Status {
+			case StatusRunning:
+				frames := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+				suffix = m.styles.StatusRunning.Render(frames[m.TickCount%len(frames)])
+			case StatusSuccess:
+				suffix = m.styles.StatusOk.Render(fmt.Sprintf("%dms", entry.DurationMs))
+			case StatusFailed:
+				suffix = m.styles.StatusFailed.Render(fmt.Sprintf("x%d", entry.ExitCode))
+			}
+			dot = m.statusDot(entry.Status)
+			name = taskLocalName(item.Name)
 		}
 
-		row := prefix + m.statusDot(entry.Status) + " " + taskLocalName(item.Name)
+		spacer := " "
+		if isSelected {
+			spacer = ""
+		}
+		row := prefix + dot + spacer + name
 		if suffix != "" {
 			row += " " + suffix
 		}
@@ -157,14 +194,16 @@ func (m Model) renderSidebar(width int) string {
 			lines = append(lines, m.styles.TaskRowNormal.Width(width).Render(row))
 		}
 	}
-
-	extraPanelHeight := 0
-	if m.promptMode {
-		extraPanelHeight = m.promptPanelHeight()
-	}
-	sidebarHeight := m.Height - extraPanelHeight
 	for len(lines) < sidebarHeight {
 		lines = append(lines, m.styles.TaskRowNormal.Width(width).Render(""))
+	}
+
+	if m.sidebarScroll > 0 && len(lines) > 1 {
+		lines[1] = m.styles.LogDim.Width(width).Render(fmt.Sprintf("  ↑ %d more", m.sidebarScroll))
+	}
+	if end < len(items) && len(lines) == sidebarHeight {
+		remaining := len(items) - end
+		lines[sidebarHeight-1] = m.styles.LogDim.Width(width).Render(fmt.Sprintf("  ↓ %d more", remaining))
 	}
 
 	return strings.Join(lines, "\n")
@@ -237,6 +276,8 @@ func (m Model) statusDot(status TaskStatus) string {
 		return m.styles.StatusOk.Render("●")
 	case StatusFailed:
 		return m.styles.StatusFailed.Render("●")
+	case StatusWatching:
+		return m.styles.StatusWarn.Render("●")
 	default:
 		return m.styles.StatusIdle.Render("●")
 	}

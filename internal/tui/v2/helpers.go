@@ -10,13 +10,13 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
-// historyLoadedMsg carries loaded history records.
+// TODO: wire historyLoadedMsg in Update() once views/history is implemented.
 type historyLoadedMsg []*store.RunRecord
 
-// statsLoadedMsg carries all run records for the stats tab.
+// TODO: wire statsLoadedMsg in Update() once views/stats is implemented.
 type statsLoadedMsg []*store.RunRecord
 
-// loadHistory is a command that loads recent history from the store.
+// TODO: call loadHistory and loadAllHistory from Init() once history/stats views are implemented.
 func loadHistory(st store.Storer) tea.Cmd {
 	return func() tea.Msg {
 		if st == nil {

@@ -2,6 +2,7 @@ package v2
 
 import (
 	"context"
+	"sort"
 	"time"
 
 	"github.com/XenomorphingTV/burrow/internal/config"
@@ -9,6 +10,7 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/store"
 	style "github.com/XenomorphingTV/burrow/internal/tui/v2/styles"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/schedule"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/tasks"
 	tea "github.com/charmbracelet/bubbletea"
 )
@@ -40,11 +42,10 @@ type Model struct {
 	activeTab Tab
 	showHelp  bool
 
-	taskView tasks.Model
-	// schedView   schedule.Model
-	// historyView history.Model
-	// statsView   stats.Model
-	// serviceView services.Model
+	taskView  tasks.Model
+	schedView schedule.Model
+
+	disabledSchedules map[string]bool
 
 	// Orchestration state — not owned by any sub-view.
 	executors      map[string]*runner.Executor
@@ -59,8 +60,10 @@ type Model struct {
 	pendingQuit bool
 }
 
+type initMsg struct{}
+
 func (m Model) Init() tea.Cmd {
-	return tick()
+	return tea.Batch(tick(), func() tea.Msg { return initMsg{} })
 }
 
 // contentHeight returns the vertical space available for the active tab view,
@@ -76,7 +79,14 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 	theme := style.ResolveTheme(cfg.Settings.Theme)
 	style := style.NewStyle(theme)
 
-	return Model{
+	disabled := make(map[string]bool)
+	if st != nil {
+		if loaded, err := st.LoadDisabledSchedules(); err == nil {
+			disabled = loaded
+		}
+	}
+
+	m := Model{
 		cfg:   cfg,
 		st:    st,
 		sched: sched,
@@ -87,11 +97,9 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 
 		activeTab: TabTasks,
 
-		taskView: tasks.New(cfg, style),
-		// schedView:   schedule.New(cfg, st, sched, style),
-		// historyView: history.New(st, style),
-		// statsView:   stats.New(style),
-		// serviceView: services.New(style),
+		taskView:          tasks.New(cfg, style),
+		schedView:         schedule.New(cfg, style, theme),
+		disabledSchedules: disabled,
 
 		executors:      make(map[string]*runner.Executor),
 		taskStartTimes: make(map[string]time.Time),
@@ -101,6 +109,8 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 		onSuccessRuns:  make(map[string]bool),
 		pendingEnv:     make(map[string]map[string]string),
 	}
+	m.schedView.Entries = m.buildScheduleEntries()
+	return m
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -111,6 +121,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.taskView.Width = msg.Width
 		m.taskView.Height = m.contentHeight()
 		m.taskView.RecalcViewport()
+		m.schedView.Width = msg.Width
+		m.schedView.Height = m.contentHeight()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -192,8 +204,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.ExitCode != 0 && task.OnFailure != "" && !m.onFailureRuns[name] {
 					return m.fireOnFailure(name, task.OnFailure)
 				}
-				// Start watcher if task has watch patterns and succeeded
-				if msg.ExitCode == 0 && len(task.Watch) > 0 {
+				// Start watcher if task has watch patterns and succeeded and not disabled
+				if msg.ExitCode == 0 && len(task.Watch) > 0 && !m.disabledSchedules["watch:"+name] {
 					ctx, cancel := context.WithCancel(context.Background())
 					m.watchers[name] = cancel
 					for i, t := range m.taskView.Tasks {
@@ -219,8 +231,104 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, awaitLog(exec.LogCh())
 
+	case initMsg:
+		var cmds []tea.Cmd
+		for name, task := range m.cfg.Tasks {
+			if len(task.Watch) > 0 && !m.disabledSchedules["watch:"+name] {
+				ctx, cancel := context.WithCancel(context.Background())
+				m.watchers[name] = cancel
+				for i, t := range m.taskView.Tasks {
+					if t.Name == name {
+						m.taskView.Tasks[i].Status = tasks.StatusWatching
+						break
+					}
+				}
+				cmds = append(cmds, startWatcher(ctx, name, task.Watch, task.Cwd))
+			}
+		}
+		m.schedView.Entries = m.buildScheduleEntries()
+		return m, tea.Batch(cmds...)
+
 	case messages.WatchTriggeredMessage:
 		return m.startTask(msg.TaskName, "watch")
+
+	case messages.ToggleScheduleMessage:
+		name := msg.Name
+		if msg.Kind == "cron" {
+			if m.sched != nil {
+				if m.sched.IsEnabled(name) {
+					m.sched.Disable(name)
+					m.disabledSchedules[name] = true
+				} else {
+					m.sched.Enable(name) //nolint:errcheck
+					delete(m.disabledSchedules, name)
+				}
+			}
+		} else {
+			key := "watch:" + name
+			if m.disabledSchedules[key] {
+				delete(m.disabledSchedules, key)
+				if _, running := m.executors[name]; !running {
+					if task, ok := m.cfg.Tasks[name]; ok {
+						ctx, cancel := context.WithCancel(context.Background())
+						m.watchers[name] = cancel
+						for i, t := range m.taskView.Tasks {
+							if t.Name == name {
+								m.taskView.Tasks[i].Status = tasks.StatusWatching
+								break
+							}
+						}
+						if m.st != nil {
+							m.st.SaveDisabledSchedules(m.disabledSchedules) //nolint:errcheck
+						}
+						m.schedView.Entries = m.buildScheduleEntries()
+						return m, startWatcher(ctx, name, task.Watch, task.Cwd)
+					}
+				}
+			} else {
+				m.disabledSchedules["watch:"+name] = true
+				if cancel, ok := m.watchers[name]; ok {
+					cancel()
+					delete(m.watchers, name)
+					for i, t := range m.taskView.Tasks {
+						if t.Name == name && t.Status == tasks.StatusWatching {
+							m.taskView.Tasks[i].Status = tasks.StatusIdle
+							break
+						}
+					}
+				}
+			}
+		}
+		if m.st != nil {
+			m.st.SaveDisabledSchedules(m.disabledSchedules) //nolint:errcheck
+		}
+		m.schedView.Entries = m.buildScheduleEntries()
+
+	case messages.EditCronMessage:
+		local, err := config.LoadLocal()
+		if err == nil {
+			if _, ok := local.Schedules[msg.Name]; ok {
+				s := local.Schedules[msg.Name]
+				s.Cron = msg.Cron
+				local.Schedules[msg.Name] = s
+			} else if gs, ok := m.cfg.Schedules[msg.Name]; ok {
+				local.Schedules[msg.Name] = config.Schedule{Task: gs.Task, Cron: msg.Cron}
+			}
+			if err := config.SaveLocal(local); err == nil {
+				if newCfg, err := config.Load(); err == nil {
+					m.cfg = newCfg
+				}
+			}
+		}
+		if m.sched != nil {
+			wasEnabled := m.sched.IsEnabled(msg.Name)
+			m.sched.UpdateSpec(msg.Name, msg.Cron)
+			m.sched.Disable(msg.Name)
+			if wasEnabled {
+				m.sched.Enable(msg.Name) //nolint:errcheck
+			}
+		}
+		m.schedView.Entries = m.buildScheduleEntries()
 	}
 	return m, nil
 }
@@ -233,6 +341,11 @@ func (m Model) View() string {
 	switch m.activeTab {
 	case TabTasks:
 		content = m.taskView.View()
+	case TabSchedule:
+		content = m.schedView.View()
+	// TODO: implement TabHistory view (views/history)
+	// TODO: implement TabStats view (views/stats)
+	// TODO: implement TabServices view (views/services)
 	default:
 		content = ""
 	}
@@ -259,6 +372,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.pendingQuit = true
 		return m, nil
+	case "tab":
+		m.activeTab = (m.activeTab + 1) % 5
+		return m, nil
+	// TODO: add shift+tab for reverse tab cycling
 	case "?":
 		m.showHelp = !m.showHelp
 		return m, nil
@@ -270,6 +387,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case TabTasks:
 		var cmd tea.Cmd
 		m.taskView, cmd = m.taskView.Update(msg)
+		return m, cmd
+	case TabSchedule:
+		var cmd tea.Cmd
+		m.schedView, cmd = m.schedView.Update(msg)
 		return m, cmd
 	}
 
@@ -317,7 +438,7 @@ func (m Model) startTask(name, trigger string) (Model, tea.Cmd) {
 			msg = "launched in external terminal"
 		}
 		m.taskView.TaskLogs[name] = []string{"$ " + task.Cmd, msg}
-		m.taskView.UpdateViewportForSelected() // TODO: implement on tasks.Model
+		m.taskView.UpdateViewportForSelected()
 		return m, nil
 	}
 
@@ -386,4 +507,43 @@ func (m Model) fireOnSuccess(parentName, onSuccess string) (Model, tea.Cmd) {
 		}
 		return nil
 	}
+}
+
+func (m Model) buildScheduleEntries() []schedule.ScheduleEntry {
+	var entries []schedule.ScheduleEntry
+
+	var schedNames []string
+	for name := range m.cfg.Schedules {
+		schedNames = append(schedNames, name)
+	}
+	sort.Strings(schedNames)
+	for _, name := range schedNames {
+		s := m.cfg.Schedules[name]
+		enabled := m.sched != nil && m.sched.IsEnabled(name)
+		entries = append(entries, schedule.ScheduleEntry{
+			Name:    name,
+			Kind:    "cron",
+			Cron:    s.Cron,
+			Enabled: enabled,
+		})
+	}
+
+	var watchNames []string
+	for name, task := range m.cfg.Tasks {
+		if len(task.Watch) > 0 {
+			watchNames = append(watchNames, name)
+		}
+	}
+	sort.Strings(watchNames)
+	for _, name := range watchNames {
+		task := m.cfg.Tasks[name]
+		entries = append(entries, schedule.ScheduleEntry{
+			Name:     name,
+			Kind:     "watch",
+			Patterns: task.Watch,
+			Enabled:  !m.disabledSchedules["watch:"+name],
+		})
+	}
+
+	return entries
 }

@@ -304,6 +304,45 @@ func openInEditor(path string, lineN int) *exec.Cmd {
 	}
 }
 
+func (m *Model) scrollToSelected() {
+	items := m.visibleItems()
+	visibleHeight := m.Height - 1 // subtract the "TASKS" header line
+	if m.promptMode {
+		visibleHeight -= m.promptPanelHeight()
+	}
+	if visibleHeight < 1 {
+		visibleHeight = 1
+	}
+
+	if m.Selected < m.sidebarScroll {
+		m.sidebarScroll = m.Selected
+	}
+	if m.Selected >= m.sidebarScroll+visibleHeight {
+		m.sidebarScroll = m.Selected - visibleHeight + 1
+	}
+
+	// If the top indicator would cover Selected, scroll up one more so it's visible.
+	if m.sidebarScroll > 0 && m.Selected == m.sidebarScroll {
+		m.sidebarScroll--
+	}
+	// If the bottom indicator would cover Selected, scroll down one more.
+	end := m.sidebarScroll + visibleHeight
+	if end < len(items) && m.Selected == end-1 {
+		m.sidebarScroll++
+	}
+
+	maxScroll := len(items) - visibleHeight
+	if maxScroll < 0 {
+		maxScroll = 0
+	}
+	if m.sidebarScroll > maxScroll {
+		m.sidebarScroll = maxScroll
+	}
+	if m.sidebarScroll < 0 {
+		m.sidebarScroll = 0
+	}
+}
+
 func (m *Model) UpdateViewportForSelected() {
 	name := m.selectedTaskName()
 	lines := m.TaskLogs[name]

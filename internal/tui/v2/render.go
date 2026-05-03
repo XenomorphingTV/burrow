@@ -57,6 +57,15 @@ func (m Model) renderStatusBar() string {
 			m.style.Key.Render("?") + " help",
 			m.style.Key.Render("q") + " quit",
 		}
+	case TabSchedule:
+		keyHints = []string{
+			m.style.Key.Render("enter") + "/" + m.style.Key.Render("space") + " toggle",
+			m.style.Key.Render("e") + " edit cron",
+			m.style.Key.Render("tab") + " switch",
+			m.style.Key.Render("/") + " filter",
+			m.style.Key.Render("?") + " help",
+			m.style.Key.Render("q") + " quit",
+		}
 	default:
 		keyHints = []string{
 			m.style.Key.Render("tab") + " switch",

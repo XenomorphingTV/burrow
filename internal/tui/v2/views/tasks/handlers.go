@@ -55,6 +55,7 @@ func (m Model) handleFilterKey(msg tea.KeyMsg) (Model, tea.Cmd) {
 	case "esc", "enter":
 		m.FilterMode = false
 		m.Selected = 0
+		m.sidebarScroll = 0
 	case "ctrl+c":
 		return m, tea.Quit
 	case "backspace", "ctrl+h":
