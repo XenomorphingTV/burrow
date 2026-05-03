@@ -8,8 +8,9 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/config"
 	"github.com/XenomorphingTV/burrow/internal/runner"
 	"github.com/XenomorphingTV/burrow/internal/store"
-	style "github.com/XenomorphingTV/burrow/internal/tui/v2/styles"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
+	style "github.com/XenomorphingTV/burrow/internal/tui/v2/styles"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/history"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/schedule"
 	"github.com/XenomorphingTV/burrow/internal/tui/v2/views/tasks"
 	tea "github.com/charmbracelet/bubbletea"
@@ -44,6 +45,7 @@ type Model struct {
 
 	taskView  tasks.Model
 	schedView schedule.Model
+	histView  history.Model
 
 	disabledSchedules map[string]bool
 
@@ -63,7 +65,7 @@ type Model struct {
 type initMsg struct{}
 
 func (m Model) Init() tea.Cmd {
-	return tea.Batch(tick(), func() tea.Msg { return initMsg{} })
+	return tea.Batch(tick(), func() tea.Msg { return initMsg{} }, loadHistory(m.st))
 }
 
 // contentHeight returns the vertical space available for the active tab view,
@@ -99,6 +101,7 @@ func New(cfg *config.Config, st store.Storer, sched *runner.Scheduler, pool *run
 
 		taskView:          tasks.New(cfg, style),
 		schedView:         schedule.New(cfg, style, theme),
+		histView:          history.New(style, theme),
 		disabledSchedules: disabled,
 
 		executors:      make(map[string]*runner.Executor),
@@ -123,6 +126,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.taskView.RecalcViewport()
 		m.schedView.Width = msg.Width
 		m.schedView.Height = m.contentHeight()
+		m.histView.Width = msg.Width
+		m.histView.Height = m.contentHeight()
+		m.histView.RecalcViewport()
 		return m, nil
 
 	case tea.KeyMsg:
@@ -132,6 +138,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.tickCount++
 		m.taskView.TickCount = m.tickCount
 		return m, tick()
+
+	case messages.ScheduledRunMsg:
+		return m.startPipeline(msg.TaskName, msg.Trigger)
 
 	case messages.RunTaskMessage:
 		if len(msg.Env) > 0 {
@@ -204,8 +213,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				if msg.ExitCode != 0 && task.OnFailure != "" && !m.onFailureRuns[name] {
 					return m.fireOnFailure(name, task.OnFailure)
 				}
-				// Start watcher if task has watch patterns and succeeded and not disabled
-				if msg.ExitCode == 0 && len(task.Watch) > 0 && !m.disabledSchedules["watch:"+name] {
+				// Re-arm the watcher regardless of exit code so failures don't kill the watch loop
+				if len(task.Watch) > 0 && !m.disabledSchedules["watch:"+name] {
 					ctx, cancel := context.WithCancel(context.Background())
 					m.watchers[name] = cancel
 					for i, t := range m.taskView.Tasks {
@@ -214,12 +223,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							break
 						}
 					}
-					return m, startWatcher(ctx, name, task.Watch, task.Cwd)
+					return m, tea.Batch(startWatcher(ctx, name, task.Watch, task.Cwd), loadHistory(m.st))
 				}
 			}
 			delete(m.onSuccessRuns, name)
 			delete(m.onFailureRuns, name)
-			return m, nil
+			return m, loadHistory(m.st)
 		}
 
 		// Streaming line — append and keep listening
@@ -249,8 +258,65 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.schedView.Entries = m.buildScheduleEntries()
 		return m, tea.Batch(cmds...)
 
+	case historyLoadedMsg:
+		m.histView.Records = []*store.RunRecord(msg)
+		if m.histView.Selected >= len(m.histView.Records) {
+			m.histView.Selected = 0
+		}
+		m.histView.RecalcViewport()
+
+		// Seed task status badges from the most recent run per task.
+		// Records are newest-first; first seen per name is the latest run.
+		// Don't overwrite statuses from the current session.
+		seen := make(map[string]bool)
+		for _, r := range m.histView.Records {
+			if seen[r.TaskName] {
+				continue
+			}
+			seen[r.TaskName] = true
+			for i, t := range m.taskView.Tasks {
+				if t.Name != r.TaskName {
+					continue
+				}
+				if t.Status != tasks.StatusIdle {
+					break
+				}
+				if r.ExitCode == 0 {
+					m.taskView.Tasks[i].Status = tasks.StatusSuccess
+				} else {
+					m.taskView.Tasks[i].Status = tasks.StatusFailed
+				}
+				m.taskView.Tasks[i].ExitCode = r.ExitCode
+				m.taskView.Tasks[i].DurationMs = r.DurationMs
+				break
+			}
+		}
+
+	case messages.ClearHistoryMessage:
+		if m.st != nil {
+			m.st.ClearAll() //nolint:errcheck
+		}
+		m.histView.Records = nil
+		m.histView.Selected = 0
+		m.histView.Scroll = 0
+		m.histView.RecalcViewport()
+
 	case messages.WatchTriggeredMessage:
-		return m.startTask(msg.TaskName, "watch")
+		name := msg.TaskName
+		// If the task is already running, its done handler will re-arm the watcher.
+		if _, running := m.executors[name]; running {
+			return m, nil
+		}
+		newM, cmd := m.startTask(name, "watch")
+		if cmd == nil {
+			// Pool was full — re-arm so we catch the next file change.
+			if task, ok := newM.cfg.Tasks[name]; ok && len(task.Watch) > 0 && !newM.disabledSchedules["watch:"+name] {
+				ctx, cancel := context.WithCancel(context.Background())
+				newM.watchers[name] = cancel
+				cmd = startWatcher(ctx, name, task.Watch, task.Cwd)
+			}
+		}
+		return newM, cmd
 
 	case messages.ToggleScheduleMessage:
 		name := msg.Name
@@ -343,7 +409,8 @@ func (m Model) View() string {
 		content = m.taskView.View()
 	case TabSchedule:
 		content = m.schedView.View()
-	// TODO: implement TabHistory view (views/history)
+	case TabHistory:
+		content = m.histView.View()
 	// TODO: implement TabStats view (views/stats)
 	// TODO: implement TabServices view (views/services)
 	default:
@@ -391,6 +458,10 @@ func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case TabSchedule:
 		var cmd tea.Cmd
 		m.schedView, cmd = m.schedView.Update(msg)
+		return m, cmd
+	case TabHistory:
+		var cmd tea.Cmd
+		m.histView, cmd = m.histView.Update(msg)
 		return m, cmd
 	}
 

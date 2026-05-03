@@ -169,9 +169,7 @@ func applyDisabledSchedules(sched *runner.Scheduler, disabled map[string]bool) {
 // onScheduledRun is the callback given to the scheduler.
 func (d *daemon) onScheduledRun(taskName, trigger string) {
 	d.mu.RLock()
-	task, ok := d.cfg.Tasks[taskName]
-	logDir := d.cfg.Settings.LogDir
-	notifyDefault := d.cfg.Settings.Notify
+	_, ok := d.cfg.Tasks[taskName]
 	d.mu.RUnlock()
 
 	if !ok {
@@ -179,14 +177,96 @@ func (d *daemon) onScheduledRun(taskName, trigger string) {
 		return
 	}
 
-	d.pool.Acquire()
-	exec := runner.NewExecutor(taskName, task, trigger, logDir, d.st, notifyDefault)
-	exec.Start()
-	go func() {
-		defer d.pool.Release()
-		for range exec.LogCh() {
+	go d.runPipeline(taskName, trigger)
+}
+
+// runPipeline resolves the dependency chain for target, runs each task in
+// order, and fires on_failure/on_success hooks after the final task.
+// It blocks until the whole pipeline finishes.
+func (d *daemon) runPipeline(target, trigger string) {
+	d.mu.RLock()
+	cfg := d.cfg
+	d.mu.RUnlock()
+
+	ordered, err := runner.Resolve(target, cfg.Tasks)
+	if err != nil || len(ordered) == 0 {
+		fmt.Fprintf(os.Stderr, "daemon: resolve pipeline for %q: %v\n", target, err)
+		return
+	}
+
+	// Run each task in dependency order; stop pipeline on first failure.
+	exitCode := 0
+	lastName := ordered[len(ordered)-1]
+	for _, name := range ordered {
+		exitCode = d.runTask(name, trigger)
+		if exitCode != 0 {
+			lastName = name
+			break
 		}
-	}()
+		// Only use "pipeline" trigger for intermediate deps; preserve trigger for target.
+		trigger = "pipeline"
+	}
+
+	// Fire hooks on the task that finished (or failed).
+	d.mu.RLock()
+	task, ok := cfg.Tasks[lastName]
+	logDir := cfg.Settings.LogDir
+	notifyDefault := cfg.Settings.Notify
+	d.mu.RUnlock()
+	if !ok {
+		return
+	}
+
+	if exitCode == 0 && task.OnSuccess != "" {
+		if hookTask, ok := cfg.Tasks[task.OnSuccess]; ok {
+			d.runTask(task.OnSuccess, "on_success")
+			_ = hookTask
+		} else {
+			d.runShellHook(lastName+".on_success", task.OnSuccess, "on_success", logDir, notifyDefault)
+		}
+	} else if exitCode != 0 && task.OnFailure != "" {
+		if hookTask, ok := cfg.Tasks[task.OnFailure]; ok {
+			d.runTask(task.OnFailure, "on_failure")
+			_ = hookTask
+		} else {
+			d.runShellHook(lastName+".on_failure", task.OnFailure, "on_failure", logDir, notifyDefault)
+		}
+	}
+}
+
+// runTask runs a single named task synchronously and returns its exit code.
+func (d *daemon) runTask(name, trigger string) int {
+	d.mu.RLock()
+	task, ok := d.cfg.Tasks[name]
+	logDir := d.cfg.Settings.LogDir
+	notifyDefault := d.cfg.Settings.Notify
+	d.mu.RUnlock()
+	if !ok {
+		return 1
+	}
+
+	d.pool.Acquire()
+	exec := runner.NewExecutor(name, task, trigger, logDir, d.st, notifyDefault)
+	exec.Start()
+	exitCode := 0
+	for line := range exec.LogCh() {
+		if line.Done {
+			exitCode = line.ExitCode
+		}
+	}
+	d.pool.Release()
+	return exitCode
+}
+
+// runShellHook runs a raw shell command (not a named task) as a hook.
+func (d *daemon) runShellHook(execName, cmd, trigger, logDir string, notify []string) {
+	d.pool.Acquire()
+	task := config.Task{Cmd: cmd}
+	exec := runner.NewExecutor(execName, task, trigger, logDir, d.st, notify)
+	exec.Start()
+	for range exec.LogCh() {
+	}
+	d.pool.Release()
 }
 
 // acceptLoop handles incoming IPC connections.
@@ -358,36 +438,18 @@ func (d *daemon) watchTask(ctx context.Context, taskName string, task config.Tas
 	}
 }
 
-// runWatchedTask runs taskName synchronously (blocking until it finishes or ctx
-// is cancelled). Running synchronously prevents stacking multiple triggered
-// runs on top of each other.
+// runWatchedTask runs the full pipeline for taskName synchronously (blocking
+// until it finishes or ctx is cancelled). Running synchronously prevents
+// stacking multiple triggered runs on top of each other.
 func (d *daemon) runWatchedTask(ctx context.Context, taskName string) {
-	d.mu.RLock()
-	task, ok := d.cfg.Tasks[taskName]
-	logDir := d.cfg.Settings.LogDir
-	notifyDefault := d.cfg.Settings.Notify
-	d.mu.RUnlock()
-	if !ok {
-		return
-	}
-
-	d.pool.Acquire()
-	exec := runner.NewExecutor(taskName, task, "watch", logDir, d.st, notifyDefault)
-	exec.Start()
-	for {
-		select {
-		case _, ok := <-exec.LogCh():
-			if !ok {
-				d.pool.Release()
-				return
-			}
-		case <-ctx.Done():
-			exec.Kill()
-			for range exec.LogCh() {
-			}
-			d.pool.Release()
-			return
-		}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		d.runPipeline(taskName, "watch")
+	}()
+	select {
+	case <-done:
+	case <-ctx.Done():
 	}
 }
 

@@ -66,6 +66,14 @@ func (m Model) renderStatusBar() string {
 			m.style.Key.Render("?") + " help",
 			m.style.Key.Render("q") + " quit",
 		}
+	case TabHistory:
+		keyHints = []string{
+			m.style.Key.Render("D") + " clear history",
+			m.style.Key.Render("tab") + " switch",
+			m.style.Key.Render("/") + " filter",
+			m.style.Key.Render("?") + " help",
+			m.style.Key.Render("q") + " quit",
+		}
 	default:
 		keyHints = []string{
 			m.style.Key.Render("tab") + " switch",

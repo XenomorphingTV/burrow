@@ -27,3 +27,9 @@ type ClearHistoryMessage struct {
 type WatchTriggeredMessage struct {
 	TaskName string
 }
+
+// ScheduledRunMsg is sent by the external scheduler when a cron task fires.
+type ScheduledRunMsg struct {
+	TaskName string
+	Trigger  string
+}

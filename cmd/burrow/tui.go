@@ -8,8 +8,8 @@ import (
 	"github.com/XenomorphingTV/burrow/internal/daemon"
 	"github.com/XenomorphingTV/burrow/internal/runner"
 	"github.com/XenomorphingTV/burrow/internal/store"
-	"github.com/XenomorphingTV/burrow/internal/tui"
 	v2 "github.com/XenomorphingTV/burrow/internal/tui/v2"
+	"github.com/XenomorphingTV/burrow/internal/tui/v2/messages"
 	tea "github.com/charmbracelet/bubbletea"
 )
 
@@ -69,7 +69,7 @@ func runTUI() error {
 	p := tea.NewProgram(model, tea.WithAltScreen())
 
 	if err := sched.Register(cfg, func(taskName, trigger string) {
-		p.Send(tui.ScheduledRunMsg{TaskName: taskName, Trigger: trigger})
+		p.Send(messages.ScheduledRunMsg{TaskName: taskName, Trigger: trigger})
 	}); err != nil {
 		fmt.Fprintf(os.Stderr, "warning: scheduler registration: %v\n", err)
 	}
