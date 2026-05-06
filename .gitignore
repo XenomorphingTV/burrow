@@ -1,6 +1,7 @@
 # build output
 /burrow
 dist/
+result
 
 # test artifacts
 *.test
